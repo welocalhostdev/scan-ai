@@ -1,0 +1,109 @@
+# ──────────────────────────────────────────────────────────────────
+# ScanAI — Docker Compose (Development)
+# Hot-reload for backend + frontend, mounted source code volumes
+# Usage: docker compose -f docker-compose-dev.yml up
+# ──────────────────────────────────────────────────────────────────
+
+services:
+  # ── Database ──
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scanai
+      POSTGRES_PASSWORD: scanai
+      POSTGRES_DB: scanai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scanai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Message Broker ──
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend API (hot-reload via --reload) ──
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://scanai:scanai@db:5432/scanai
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app  # Mount source for hot-reload
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Celery Worker (auto-restart on file changes) ──
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://scanai:scanai@db:5432/scanai
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app  # Mount source for live changes
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      watchmedo auto-restart
+        --directory=/app
+        --pattern="*.py"
+        --recursive
+        -- celery -A tasks worker --loglevel=info --concurrency=2
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+
+  # ── Frontend (Next.js dev server with hot-reload) ──
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: deps  # Only install deps, don't build production
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend:/app              # Mount source for HMR
+      - /app/node_modules            # Preserve container node_modules
+      - /app/.next                   # Preserve build cache
+    depends_on:
+      - api
+    command: npx next dev --hostname 0.0.0.0 --port 3000
+
+volumes:
+  pgdata:
+    driver: local
