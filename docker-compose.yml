@@ -47,6 +47,7 @@ services:
     environment:
       DATABASE_URL: postgresql://scanai:scanai@db:5432/scanai
       REDIS_URL: redis://redis:6379/0
+      ALLOWED_ORIGINS: https://scanai.welocalhost.com
     depends_on:
       db:
         condition: service_healthy
@@ -81,6 +82,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ""
     restart: unless-stopped
     expose:
       - "3000"
