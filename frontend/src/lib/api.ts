@@ -54,6 +54,7 @@ export interface ScanStatusResponse {
   sub_tasks: Record<string, SubTaskStatus> | null;
   report: ScanReport | null;
   error: string | null;
+  pdf_url: string | null;
   created_at: string;
   user_id: string | null;
 }
