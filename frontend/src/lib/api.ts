@@ -80,8 +80,6 @@ export interface AdminScan {
   status: string;
   progress_step: number;
   error: string | null;
-  pdf_url: string | null;
-  report: ScanReport | null;
   created_at: string;
   user_email: string | null;
   user_name: string | null;
@@ -192,18 +190,18 @@ export async function deleteAdminUser(userId: string): Promise<void> {
   await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
 }
 
-export async function generateAdminScanPDF(scanId: string): Promise<AdminScanPDFResponse> {
-  return apiFetch<AdminScanPDFResponse>(`/api/admin/scans/${scanId}/generate-pdf`, {
+export async function generateScanPDF(scanId: string): Promise<AdminScanPDFResponse> {
+  return apiFetch<AdminScanPDFResponse>(`/api/scans/${scanId}/generate-pdf`, {
     method: "POST",
   });
 }
 
-export function getAdminScanPDFViewUrl(scanId: string): string {
-  return `/api/admin/scans/${scanId}/pdf`;
+export function getScanPDFViewUrl(scanId: string): string {
+  return `/api/scans/${scanId}/pdf`;
 }
 
-export function getAdminScanPDFDownloadUrl(scanId: string): string {
-  return `/api/admin/scans/${scanId}/pdf?download=1`;
+export function getScanPDFDownloadUrl(scanId: string): string {
+  return `/api/scans/${scanId}/pdf?download=1`;
 }
 
 // ── Token Usage API ──────────────────────────────────────────────

@@ -2,7 +2,14 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getScan, type ScanStatusResponse, type Finding } from "@/lib/api";
+import {
+  generateScanPDF,
+  getScan,
+  getScanPDFDownloadUrl,
+  getScanPDFViewUrl,
+  type ScanStatusResponse,
+  type Finding,
+} from "@/lib/api";
 import { FindingCard } from "@/components/finding-card";
 import { SeverityBadge } from "@/components/severity-badge";
 import { Button } from "@/components/ui/button";
@@ -55,6 +62,7 @@ export default function ReportPage() {
   const [scan, setScan] = useState<ScanStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -119,6 +127,20 @@ export default function ReportPage() {
   }
 
   const report = scan.report;
+
+  async function handleGeneratePdf() {
+    try {
+      setGeneratingPdf(true);
+      const result = await generateScanPDF(scanId);
+      setScan((prev) => (prev ? { ...prev, pdf_url: result.pdf_url } : prev));
+      window.open(getScanPDFViewUrl(scanId), "_blank", "noopener,noreferrer");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to generate PDF.";
+      setError(message);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }
 
   return (
     <main className="flex-1 bg-background relative selection:bg-light-signal-orange selection:text-white">
@@ -200,6 +222,34 @@ export default function ReportPage() {
           </div>
           
           <div className="flex items-center gap-3 no-print animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+            {scan.pdf_url ? (
+              <a
+                href={getScanPDFDownloadUrl(scanId)}
+                className="inline-flex items-center gap-2 rounded-pill border border-ink-black/10 bg-white px-6 py-2 text-sm font-medium text-ink-black transition-colors hover:bg-ink-black/5"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                Download Memo PDF
+              </a>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGeneratePdf}
+                disabled={generatingPdf}
+                className="rounded-pill px-6"
+              >
+                <svg className={`w-4 h-4 mr-2 ${generatingPdf ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  {generatingPdf ? (
+                    <path d="M12 2a10 10 0 1 0 10 10" />
+                  ) : (
+                    <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
+                  )}
+                </svg>
+                {generatingPdf ? "Generating PDF..." : "Generate Memo PDF"}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => window.print()} className="rounded-pill px-6">
               <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />

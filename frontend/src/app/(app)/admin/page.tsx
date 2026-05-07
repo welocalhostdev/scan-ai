@@ -8,9 +8,6 @@ import {
   getAdminUsers,
   getAdminScans,
   deleteAdminUser,
-  generateAdminScanPDF,
-  getAdminScanPDFDownloadUrl,
-  getAdminScanPDFViewUrl,
   getTokenUsageStats,
   type AdminStats,
   type AdminUser,
@@ -25,64 +22,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface ScanDetailModalProps {
   scan: AdminScan | null;
   onClose: () => void;
-  onGeneratePDF: (scanId: string) => Promise<void>;
-  onOpenPDF: (scan: AdminScan, autoDownload?: boolean) => void;
-  generatingPDF: string | null;
 }
 
-interface PDFPreviewModalProps {
-  scan: AdminScan | null;
-  autoDownloadToken: number;
-  onClose: () => void;
-}
-
-function PDFPreviewModal({ scan, autoDownloadToken, onClose }: PDFPreviewModalProps) {
-  useEffect(() => {
-    if (!scan || !autoDownloadToken) return;
-
-    const link = document.createElement("a");
-    link.href = getAdminScanPDFDownloadUrl(scan.id);
-    link.download = "";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  }, [autoDownloadToken, scan]);
-
-  if (!scan) return null;
-
-  return (
-    <div className="fixed inset-0 z-[60] bg-black/70 p-4">
-      <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 text-white">
-          <div>
-            <h2 className="text-lg font-semibold">PDF Preview</h2>
-            <p className="text-xs text-zinc-400">{scan.url}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <a
-              href={getAdminScanPDFDownloadUrl(scan.id)}
-              className="inline-flex items-center gap-2 rounded-lg bg-signal-orange px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-signal-orange/90"
-            >
-              Download
-            </a>
-            <Button variant="outline" onClick={onClose} className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white">
-              Close
-            </Button>
-          </div>
-        </div>
-        <div className="flex-1 bg-zinc-900">
-          <iframe
-            title="Scan PDF preview"
-            src={getAdminScanPDFViewUrl(scan.id)}
-            className="h-full w-full border-0 bg-white"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ScanDetailModal({ scan, onClose, onGeneratePDF, onOpenPDF, generatingPDF }: ScanDetailModalProps) {
+function ScanDetailModal({ scan, onClose }: ScanDetailModalProps) {
   if (!scan) return null;
 
   return (
@@ -147,74 +89,16 @@ function ScanDetailModal({ scan, onClose, onGeneratePDF, onOpenPDF, generatingPD
               <p className="text-sm text-red-700 font-mono whitespace-pre-wrap">{scan.error}</p>
             </div>
           )}
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-amber-700 mb-2">
+              Privacy Boundary
+            </p>
+            <p className="text-sm text-amber-900">
+              Admin access is limited to operational metadata here. Report contents and generated PDFs are only available to the scan owner.
+            </p>
+          </div>
 
-          {/* Report Summary */}
-          {scan.report && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Report Summary</p>
-              <p className="text-sm text-gray-700 mb-3">{scan.report.summary}</p>
-              {scan.report.risk_score !== undefined && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Risk Score:</span>
-                  <span className={`font-semibold ${
-                    scan.report.risk_score >= 80 ? "text-red-600" :
-                    scan.report.risk_score >= 60 ? "text-orange-600" :
-                    scan.report.risk_score >= 40 ? "text-amber-600" :
-                    scan.report.risk_score >= 20 ? "text-blue-600" : "text-emerald-600"
-                  }`}>
-                    {scan.report.risk_score}/100
-                  </span>
-                </div>
-              )}
-              {scan.report.findings && (
-                <p className="text-xs text-gray-500 mt-2">
-                  {scan.report.findings.length} finding(s) detected
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* PDF Actions */}
           <div className="flex items-center gap-3 pt-2">
-            {scan.pdf_url ? (
-              <>
-                <Button
-                  onClick={() => onOpenPDF(scan)}
-                  className="inline-flex items-center gap-2"
-                >
-                  View PDF
-                </Button>
-                <a
-                  href={getAdminScanPDFDownloadUrl(scan.id)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
-                >
-                  Download PDF
-                </a>
-              </>
-            ) : scan.status === "complete" ? (
-              <Button
-                onClick={() => onGeneratePDF(scan.id)}
-                disabled={generatingPDF === scan.id}
-                className="inline-flex items-center gap-2"
-              >
-                {generatingPDF === scan.id ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Generate PDF
-                  </>
-                )}
-              </Button>
-            ) : null}
             <Button variant="outline" onClick={onClose}>Close</Button>
           </div>
         </div>
@@ -234,9 +118,6 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"users" | "scans" | "tokens">("users");
   const [selectedScan, setSelectedScan] = useState<AdminScan | null>(null);
-  const [previewScan, setPreviewScan] = useState<AdminScan | null>(null);
-  const [previewAutoDownloadToken, setPreviewAutoDownloadToken] = useState(0);
-  const [generatingPDF, setGeneratingPDF] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -285,41 +166,6 @@ export default function AdminPage() {
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Delete failed.");
     }
-  };
-
-  const handleGeneratePDF = async (scanId: string) => {
-    setGeneratingPDF(scanId);
-    try {
-      const result = await generateAdminScanPDF(scanId);
-      const existingScan =
-        (selectedScan && selectedScan.id === scanId ? selectedScan : null) ||
-        scans.find((scan) => scan.id === scanId) ||
-        null;
-      const updatedScan = existingScan ? { ...existingScan, pdf_url: result.pdf_url } : null;
-
-      setScans((prev) =>
-        prev.map((scan) =>
-          scan.id === scanId ? { ...scan, pdf_url: result.pdf_url } : scan
-        )
-      );
-      setSelectedScan((prev) =>
-        prev && prev.id === scanId ? { ...prev, pdf_url: result.pdf_url } : prev
-      );
-
-      if (updatedScan) {
-        setPreviewScan(updatedScan);
-        setPreviewAutoDownloadToken(Date.now());
-      }
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to generate PDF.");
-    } finally {
-      setGeneratingPDF(null);
-    }
-  };
-
-  const handleOpenPDF = (scan: AdminScan, autoDownload = false) => {
-    setPreviewScan(scan);
-    setPreviewAutoDownloadToken(autoDownload ? Date.now() : 0);
   };
 
   if (authLoading || loading) {
@@ -597,7 +443,6 @@ export default function AdminPage() {
                       <th className="text-left p-4 font-medium text-muted-foreground">User</th>
                       <th className="text-left p-4 font-medium text-muted-foreground">Status</th>
                       <th className="text-left p-4 font-medium text-muted-foreground">Step</th>
-                      <th className="text-left p-4 font-medium text-muted-foreground">PDF</th>
                       <th className="text-left p-4 font-medium text-muted-foreground">Created</th>
                     </tr>
                   </thead>
@@ -627,20 +472,6 @@ export default function AdminPage() {
                           </Badge>
                         </td>
                         <td className="p-4 font-mono">{s.progress_step}/7</td>
-                        <td className="p-4">
-                          {s.pdf_url ? (
-                            <span className="inline-flex items-center text-emerald-600 text-xs">
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Ready
-                            </span>
-                          ) : s.status === "complete" ? (
-                            <span className="text-xs text-gray-400">Click to generate</span>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
-                        </td>
                         <td className="p-4 text-muted-foreground">
                           {new Date(s.created_at).toLocaleDateString()}
                         </td>
@@ -658,18 +489,6 @@ export default function AdminPage() {
       <ScanDetailModal
         scan={selectedScan}
         onClose={() => setSelectedScan(null)}
-        onGeneratePDF={handleGeneratePDF}
-        onOpenPDF={handleOpenPDF}
-        generatingPDF={generatingPDF}
-      />
-
-      <PDFPreviewModal
-        scan={previewScan}
-        autoDownloadToken={previewAutoDownloadToken}
-        onClose={() => {
-          setPreviewScan(null);
-          setPreviewAutoDownloadToken(0);
-        }}
       />
     </main>
   );

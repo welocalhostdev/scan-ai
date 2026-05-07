@@ -118,6 +118,7 @@ class ScanStatusResponse(BaseModel):
     sub_tasks: dict[str, str] | None = None  # tool_key -> status
     report: dict[str, Any] | None = None
     error: str | None = None
+    pdf_url: str | None = None
     created_at: str
     user_id: str | None = None
 
@@ -145,8 +146,6 @@ class AdminScanResponse(BaseModel):
     status: str
     progress_step: int
     error: str | None = None
-    pdf_url: str | None = None
-    report: dict | None = None
     created_at: str
     user_email: str | None = None
     user_name: str | None = None
@@ -239,6 +238,74 @@ def _get_scan_or_404(db: Session, scan_id: str) -> Scan:
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found.")
     return scan
+
+
+def _enforce_scan_access(scan: Scan, current_user: User) -> None:
+    """Ensure the current user can access the given scan."""
+    if current_user.role != UserRole.ADMIN and scan.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Scan not found.")
+
+
+def _generate_pdf_for_scan(scan: Scan, db: Session, *, route_prefix: str) -> dict[str, str]:
+    """Generate and store a PDF for a completed scan, returning app-relative URLs."""
+    if scan.status != ScanStatus.COMPLETE:
+        raise HTTPException(
+            status_code=400,
+            detail="PDF can only be generated for completed scans."
+        )
+
+    if not scan.report:
+        raise HTTPException(
+            status_code=400,
+            detail="No report data available for PDF generation."
+        )
+
+    from pdf_storage import generate_and_store_pdf
+
+    stored_pdf_ref = generate_and_store_pdf(
+        scan_id=str(scan.id),
+        url=scan.url,
+        report_data=scan.report,
+    )
+
+    if not stored_pdf_ref:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate or upload PDF. Check MinIO configuration."
+        )
+
+    scan.pdf_url = stored_pdf_ref
+    db.commit()
+
+    view_url = f"{route_prefix}/{scan.id}/pdf"
+    download_url = f"{view_url}?download=1"
+    return {
+        "pdf_url": view_url,
+        "view_url": view_url,
+        "download_url": download_url,
+        "message": "PDF generated and stored successfully.",
+    }
+
+
+def _stream_scan_pdf(scan: Scan, *, download: bool) -> Response:
+    """Stream a stored PDF through the app."""
+    if not scan.pdf_url:
+        raise HTTPException(status_code=404, detail="No generated PDF is available for this scan yet.")
+
+    from pdf_storage import fetch_pdf_from_minio
+
+    pdf_bytes = fetch_pdf_from_minio(str(scan.id))
+    if not pdf_bytes:
+        raise HTTPException(status_code=404, detail="Stored PDF could not be retrieved.")
+
+    filename = f"scanai-report-{str(scan.id)[:8]}.pdf"
+    disposition = "attachment" if download else "inline"
+    headers = {
+        "Content-Disposition": f'{disposition}; filename="{filename}"',
+        "Cache-Control": "private, max-age=300",
+    }
+
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
 # ── Health ─────────────────────────────────────────────────────────
@@ -445,6 +512,7 @@ async def get_scan_status(
         sub_tasks=scan.sub_tasks,
         report=scan.report,
         error=scan.error,
+        pdf_url=(f"/api/scans/{scan.id}/pdf" if scan.pdf_url else None),
         created_at=scan.created_at.isoformat(),
         user_id=str(scan.user_id) if scan.user_id else None,
     )
@@ -472,11 +540,37 @@ async def list_my_scans(
             progress_step=s.progress_step,
             report=None,  # Don't send full reports in list view
             error=s.error,
+            pdf_url=(f"/api/scans/{s.id}/pdf" if s.pdf_url else None),
             created_at=s.created_at.isoformat(),
             user_id=str(s.user_id) if s.user_id else None,
         )
         for s in scans
     ]
+
+
+@app.post("/api/scans/{scan_id}/generate-pdf")
+async def generate_scan_pdf(
+    scan_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate and store a PDF report for a scan owned by the current user."""
+    scan = _get_scan_or_404(db, scan_id)
+    _enforce_scan_access(scan, current_user)
+    return _generate_pdf_for_scan(scan, db, route_prefix="/api/scans")
+
+
+@app.get("/api/scans/{scan_id}/pdf")
+async def get_scan_pdf(
+    scan_id: str,
+    download: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Stream a generated PDF for a scan owned by the current user."""
+    scan = _get_scan_or_404(db, scan_id)
+    _enforce_scan_access(scan, current_user)
+    return _stream_scan_pdf(scan, download=download)
 
 
 # ── Admin Endpoints ────────────────────────────────────────────────
@@ -549,98 +643,12 @@ async def admin_list_scans(
             status=s.status.value,
             progress_step=s.progress_step,
             error=s.error,
-            pdf_url=s.pdf_url,
-            report=s.report,
             created_at=s.created_at.isoformat(),
             user_email=s.user.email if s.user else None,
             user_name=s.user.name if s.user else None,
         )
         for s in scans
     ]
-
-
-@app.post("/api/admin/scans/{scan_id}/generate-pdf")
-async def admin_generate_pdf(
-    scan_id: str,
-    db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
-):
-    """
-    Generate and store a PDF report for a completed scan.
-    Only works for scans with status 'complete' and existing report data.
-    """
-    scan = _get_scan_or_404(db, scan_id)
-
-    if scan.status != ScanStatus.COMPLETE:
-        raise HTTPException(
-            status_code=400,
-            detail="PDF can only be generated for completed scans."
-        )
-
-    if not scan.report:
-        raise HTTPException(
-            status_code=400,
-            detail="No report data available for PDF generation."
-        )
-
-    # Import here to avoid loading if not needed
-    from pdf_storage import generate_and_store_pdf
-
-    # Generate and upload PDF
-    stored_pdf_ref = generate_and_store_pdf(
-        scan_id=str(scan.id),
-        url=scan.url,
-        report_data=scan.report,
-    )
-
-    if not stored_pdf_ref:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate or upload PDF. Check MinIO configuration."
-        )
-
-    view_url = f"/api/admin/scans/{scan.id}/pdf"
-    download_url = f"{view_url}?download=1"
-
-    # Store the internal object reference instead of a public MinIO URL.
-    scan.pdf_url = stored_pdf_ref
-    db.commit()
-
-    return {
-        "pdf_url": view_url,
-        "view_url": view_url,
-        "download_url": download_url,
-        "message": "PDF generated and stored successfully.",
-    }
-
-
-@app.get("/api/admin/scans/{scan_id}/pdf")
-async def admin_get_pdf(
-    scan_id: str,
-    download: bool = Query(False),
-    db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
-):
-    """Stream a generated PDF through the app instead of exposing MinIO directly."""
-    scan = _get_scan_or_404(db, scan_id)
-
-    if not scan.pdf_url:
-        raise HTTPException(status_code=404, detail="No generated PDF is available for this scan yet.")
-
-    from pdf_storage import fetch_pdf_from_minio
-
-    pdf_bytes = fetch_pdf_from_minio(str(scan.id))
-    if not pdf_bytes:
-        raise HTTPException(status_code=404, detail="Stored PDF could not be retrieved.")
-
-    filename = f"scanai-report-{str(scan.id)[:8]}.pdf"
-    disposition = "attachment" if download else "inline"
-    headers = {
-        "Content-Disposition": f'{disposition}; filename="{filename}"',
-        "Cache-Control": "private, max-age=300",
-    }
-
-    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
 @app.delete("/api/admin/users/{user_id}")
