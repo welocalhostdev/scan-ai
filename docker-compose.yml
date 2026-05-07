@@ -48,10 +48,17 @@ services:
       DATABASE_URL: postgresql://scanai:scanai@db:5432/scanai
       REDIS_URL: redis://redis:6379/0
       ALLOWED_ORIGINS: https://scanai.welocalhost.com
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: scanai
+      MINIO_SECRET_KEY: scanai-secret-key
+      MINIO_BUCKET: scanai-reports
+      MINIO_SECURE: "false"
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
@@ -66,10 +73,17 @@ services:
     environment:
       DATABASE_URL: postgresql://scanai:scanai@db:5432/scanai
       REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: scanai
+      MINIO_SECRET_KEY: scanai-secret-key
+      MINIO_BUCKET: scanai-reports
+      MINIO_SECURE: "false"
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     command: celery -A tasks worker --loglevel=info --concurrency=2
     # Scanner tools need some privileges for naabu SYN scanning
@@ -92,6 +106,27 @@ services:
     depends_on:
       - api
 
+  # ── Object Storage (internal-only, for generated PDFs) ──
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    expose:
+      - "9000"
+      - "9001"
+    environment:
+      MINIO_ROOT_USER: scanai
+      MINIO_ROOT_PASSWORD: scanai-secret-key
+    volumes:
+      - miniodata:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pgdata:
+    driver: local
+  miniodata:
     driver: local
