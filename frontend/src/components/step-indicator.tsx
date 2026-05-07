@@ -1,16 +1,19 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import type { SubTaskStatus } from "@/lib/api";
 
 interface StepIndicatorProps {
   currentStep: number;
   failed: boolean;
+  subTasks?: Record<string, SubTaskStatus> | null;
 }
 
 const STEPS = [
   {
     label: "Advanced Reconnaissance",
     description: "Discovering all subdomains via 50+ intelligence sources",
+    toolKey: "subfinder",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
         <circle cx="12" cy="12" r="10" />
@@ -22,6 +25,7 @@ const STEPS = [
   {
     label: "Host Probing",
     description: "Verifying active endpoints and technology stacks",
+    toolKey: "httpx",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
         <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
@@ -33,6 +37,7 @@ const STEPS = [
   {
     label: "Service Mapping",
     description: "Identifying exposed services and open ports",
+    toolKey: "naabu",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -43,6 +48,7 @@ const STEPS = [
   {
     label: "Deep Crawling",
     description: "Mapping logic flows, hidden forms, and API routes",
+    toolKey: "katana",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -55,6 +61,7 @@ const STEPS = [
   {
     label: "Vulnerability Assessment",
     description: "Scanning for CVEs and configuration weaknesses",
+    toolKey: "nuclei",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -64,6 +71,7 @@ const STEPS = [
   {
     label: "TLS Intelligence",
     description: "Analyzing certificate integrity and handshake security",
+    toolKey: "testssl",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -74,6 +82,7 @@ const STEPS = [
   {
     label: "Synthesizing Report",
     description: "AI-driven prioritization and remediation planning",
+    toolKey: "ai",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -104,63 +113,138 @@ function FailIcon() {
   );
 }
 
-export function StepIndicator({ currentStep, failed }: StepIndicatorProps) {
+function SubTaskDot({ status }: { status: SubTaskStatus }) {
+  if (status === "complete") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3 text-signal-orange">
+        <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (status === "running") {
+    return (
+      <span className="relative flex h-4 w-4 items-center justify-center">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal-orange opacity-60" />
+        <span className="absolute inline-flex h-3 w-3 animate-pulse rounded-full bg-signal-orange" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return <span className="w-3 h-3 rounded-full bg-destructive animate-pulse" />;
+  }
+  return <span className="w-3 h-3 rounded-full border border-ink-black/15" />;
+}
+
+function RunningAnimation() {
+  return (
+    <span className="inline-flex items-center gap-1 ml-2">
+      <span className="w-1 h-1 rounded-full bg-signal-orange animate-bounce" style={{ animationDelay: "0ms" }} />
+      <span className="w-1 h-1 rounded-full bg-signal-orange animate-bounce" style={{ animationDelay: "150ms" }} />
+      <span className="w-1 h-1 rounded-full bg-signal-orange animate-bounce" style={{ animationDelay: "300ms" }} />
+    </span>
+  );
+}
+
+export function StepIndicator({ currentStep, failed, subTasks }: StepIndicatorProps) {
   return (
     <div className="w-full space-y-4">
       {STEPS.map((step, index) => {
         const stepNumber = index + 1;
-        const isComplete = currentStep > stepNumber;
-        const isActive = currentStep === stepNumber;
-        const isPending = currentStep < stepNumber;
-        const isFailed = failed && isActive;
+        const isCurrentStep = currentStep === stepNumber;
+        const isPastStep = currentStep > stepNumber;
+
+        // Prefer the live tool status, but infer "running" for the active step
+        // so the UI still highlights when the backend state lags a little.
+        const rawToolStatus = subTasks?.[step.toolKey];
+        const toolStatus: SubTaskStatus = rawToolStatus
+          ?? (isCurrentStep ? "running" : isPastStep ? "complete" : "pending");
+
+        const isComplete = toolStatus === "complete" || (!rawToolStatus && isPastStep);
+        const isActive = !failed && toolStatus === "running";
+        const isFailed = (failed && isCurrentStep) || toolStatus === "failed";
+        const isPending = !isComplete && !isActive && !isFailed;
 
         return (
-          <div key={stepNumber} className="relative flex items-center gap-6 group">
+          <div key={stepNumber} className="relative flex items-start gap-6 group">
             {/* Vertical connector line */}
             {index < STEPS.length - 1 && (
               <div
                 className={cn(
                   "absolute left-6 top-10 w-0.5 h-10 transition-all duration-700",
-                  isComplete ? "bg-signal-orange" : "bg-ink-black/5"
+                  (isComplete || isActive) ? "bg-signal-orange" : "bg-ink-black/5"
                 )}
               />
             )}
 
             {/* Circle */}
-            <div
-              className={cn(
-                "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 relative shrink-0 z-10",
-                isComplete && "bg-signal-orange text-white",
-                isActive && !isFailed && "bg-ink-black text-white ring-8 ring-ink-black/5",
-                isFailed && "bg-destructive text-white",
-                isPending && "bg-white border border-ink-black/10 text-ink-black/30"
+            <div className="relative shrink-0 z-10 mt-0.5">
+              {/* Pulsing ring for active step */}
+              {isActive && (
+                <span className="absolute inset-0 rounded-full bg-signal-orange/30 animate-ping" />
               )}
-            >
-              {isComplete ? (
-                <CheckIcon />
-              ) : isFailed ? (
-                <FailIcon />
-              ) : (
-                step.icon
-              )}
+              <div
+                className={cn(
+                  "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 relative",
+                  isComplete && "bg-signal-orange text-white shadow-[0_8px_24px_rgba(249,115,22,0.25)]",
+                  isActive && "bg-ink-black text-white ring-4 ring-signal-orange/50 shadow-[0_10px_28px_rgba(0,0,0,0.16)] scale-[1.03]",
+                  isFailed && "bg-destructive text-white shadow-[0_8px_24px_rgba(239,68,68,0.25)]",
+                  isPending && "bg-white border border-ink-black/10 text-ink-black/30"
+                )}
+              >
+                {isComplete ? (
+                  <CheckIcon />
+                ) : isFailed ? (
+                  <FailIcon />
+                ) : (
+                  step.icon
+                )}
+              </div>
             </div>
 
             {/* Text Content */}
             <div className={cn(
-              "text-left transition-all duration-300",
+              "text-left transition-all duration-300 flex-1 min-w-0",
               isPending && "opacity-30"
             )}>
-              <p
-                className={cn(
-                  "font-medium text-base tracking-tight",
-                  (isComplete || isActive) ? "text-ink-black" : "text-ink-black/40"
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p
+                    className={cn(
+                      "font-medium text-base tracking-tight transition-colors",
+                      isComplete && "text-signal-orange",
+                      isActive && "text-ink-black",
+                      isPending && "text-ink-black/40",
+                      isFailed && "text-destructive"
+                    )}
+                  >
+                    {step.label}
+                  </p>
+                  <p className={cn(
+                    "text-xs font-medium transition-colors",
+                    isActive ? "text-ink-black/75" : "text-slate-gray"
+                  )}>
+                    {step.description}
+                  </p>
+                </div>
+
+                {/* Real-time status indicator */}
+                {(isActive || isComplete || toolStatus !== "pending") && (
+                   <div className="flex items-center gap-2">
+                     <SubTaskDot status={toolStatus} />
+                     <span className={cn(
+                       "text-[10px] font-bold uppercase tracking-wider",
+                       toolStatus === "complete" && "text-signal-orange",
+                       toolStatus === "running" && "text-ink-black animate-pulse",
+                       toolStatus === "failed" && "text-destructive",
+                       toolStatus === "pending" && "text-ink-black/20"
+                     )}>
+                       {toolStatus}
+                       {toolStatus === "running" && <RunningAnimation />}
+                     </span>
+                   </div>
                 )}
-              >
-                {step.label}
-              </p>
-              <p className="text-xs text-slate-gray font-medium">
-                {step.description}
-              </p>
+              </div>
             </div>
           </div>
         );
@@ -168,4 +252,3 @@ export function StepIndicator({ currentStep, failed }: StepIndicatorProps) {
     </div>
   );
 }
-

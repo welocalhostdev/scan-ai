@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScanAI Report Sample</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --canvas: #f3f0ee;
+      --paper: #ffffff;
+      --paper-soft: #fcfbfa;
+      --ink: #141413;
+      --ink-soft: #262627;
+      --muted: #696969;
+      --line: rgba(20, 20, 19, 0.09);
+      --line-strong: rgba(20, 20, 19, 0.16);
+      --signal: #cf4500;
+      --signal-bright: #f37338;
+      --signal-soft: #f8ece4;
+      --amber: #f79e1b;
+      --blue: #3860be;
+      --shadow-premium:
+        0 0 0 0.5px rgba(20, 20, 19, 0.05),
+        0 1px 2px rgba(20, 20, 19, 0.04),
+        0 8px 24px rgba(20, 20, 19, 0.06),
+        0 24px 48px rgba(20, 20, 19, 0.05);
+      --shadow-soft: 0 16px 40px rgba(20, 20, 19, 0.08);
+      --radius-xl: 42px;
+      --radius-lg: 28px;
+      --radius-md: 20px;
+      --radius-pill: 999px;
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      background: #d8d0ca;
+      color: var(--ink);
+      font-family: "Inter", "Sofia Sans", "Avenir Next", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    @page {
+      size: 720px 1280px;
+      margin: 0;
+    }
+
+    body {
+      padding: 24px;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    p {
+      margin: 0;
+    }
+
+    .stack {
+      display: grid;
+      gap: 32px;
+      justify-content: center;
+    }
+
+    .page {
+      position: relative;
+      width: 720px;
+      height: 1280px;
+      min-height: 1280px;
+      overflow: hidden;
+      background: var(--canvas);
+      padding: 42px 42px 84px;
+      box-shadow: 0 28px 80px rgba(20, 20, 19, 0.11);
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+
+    .page::before,
+    .page::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .page-a::before {
+      width: 470px;
+      height: 470px;
+      right: -140px;
+      top: -110px;
+      background:
+        radial-gradient(circle at 35% 35%, rgba(243, 115, 56, 0.98) 0 23%, transparent 24%),
+        radial-gradient(circle at 52% 52%, rgba(207, 69, 0, 0.95) 0 34%, transparent 35%),
+        radial-gradient(circle at 72% 68%, rgba(244, 190, 140, 0.92) 0 16%, transparent 17%);
+      filter: blur(10px);
+    }
+
+    .page-a::after {
+      width: 580px;
+      height: 580px;
+      right: -265px;
+      top: 168px;
+      border: 1px solid rgba(207, 69, 0, 0.24);
+    }
+
+    .page-b::before {
+      width: 520px;
+      height: 520px;
+      left: -270px;
+      bottom: -200px;
+      border: 1px solid rgba(207, 69, 0, 0.15);
+    }
+
+    .page-b::after {
+      width: 280px;
+      height: 280px;
+      right: -110px;
+      top: 180px;
+      background: radial-gradient(circle, rgba(243, 115, 56, 0.18) 0 36%, transparent 62%);
+    }
+
+    .page-b .split-layout {
+      margin-top: 22px;
+      gap: 14px;
+    }
+
+    .page-b .panel,
+    .page-b .dark-panel {
+      padding: 20px;
+    }
+
+    .page-b .quote {
+      margin-top: 14px;
+      font-size: 30px;
+      line-height: 1.08;
+    }
+
+    .page-b .body-copy {
+      margin-top: 14px;
+      font-size: 15px;
+      line-height: 1.52;
+    }
+
+    .page-b .priority-list {
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .page-b .priority-item {
+      padding: 12px;
+    }
+
+    .page-b .flow-track {
+      margin-top: 14px;
+    }
+
+    .page-b .flow-node {
+      min-height: 162px;
+      padding: 16px;
+    }
+
+    .page-c::before {
+      width: 410px;
+      height: 410px;
+      right: -190px;
+      top: 70px;
+      background: radial-gradient(circle, rgba(56, 96, 190, 0.13) 0 38%, transparent 66%);
+    }
+
+    .page-c::after {
+      width: 320px;
+      height: 320px;
+      left: -120px;
+      bottom: 70px;
+      border: 1px solid rgba(207, 69, 0, 0.12);
+    }
+
+    .page-d::before {
+      width: 460px;
+      height: 460px;
+      left: -240px;
+      top: -180px;
+      background: radial-gradient(circle, rgba(207, 69, 0, 0.1) 0 42%, transparent 70%);
+    }
+
+    .page-d::after {
+      width: 430px;
+      height: 430px;
+      right: -220px;
+      bottom: -160px;
+      border: 1px solid rgba(56, 96, 190, 0.14);
+    }
+
+    .page-c .section-head {
+      margin-top: 24px;
+    }
+
+    .page-c .section-title {
+      font-size: 52px;
+    }
+
+    .page-c .section-copy {
+      margin-top: 12px;
+      font-size: 16px;
+      line-height: 1.48;
+      max-width: 470px;
+    }
+
+    .page-c .visual-grid {
+      margin-top: 22px;
+      gap: 14px;
+    }
+
+    .page-c .visual-stack {
+      gap: 14px;
+    }
+
+    .page-c .visual-card,
+    .page-c .severity-board {
+      padding: 18px;
+    }
+
+    .page-c .severity-board {
+      min-height: 404px;
+    }
+
+    .page-c .annotation {
+      margin-top: 16px;
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .page-c .donut-wrap {
+      gap: 14px;
+      margin-top: 8px;
+    }
+
+    .page-c .donut {
+      width: 220px;
+      height: 220px;
+    }
+
+    .page-c .legend {
+      gap: 8px;
+    }
+
+    .page-c .inventory {
+      margin-top: 16px;
+      min-height: 144px;
+    }
+
+    .page-c .print-note {
+      margin-top: 14px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .page-c .dark-panel {
+      padding: 18px;
+    }
+
+    .page-c .asset-list {
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .page-c .asset-row {
+      padding: 12px 14px;
+      border-radius: 16px;
+    }
+
+    .page-c .asset-row strong {
+      font-size: 12px;
+    }
+
+    .page-c .asset-row span {
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .page-c .visual-stack:last-child .visual-card:last-child .quote {
+      font-size: 24px !important;
+      line-height: 1.06;
+    }
+
+    .page-c .visual-stack:last-child .visual-card:last-child .body-copy {
+      margin-top: 12px;
+      font-size: 15px;
+      line-height: 1.48;
+    }
+
+    .page-d .section-head {
+      margin-top: 24px;
+    }
+
+    .page-d .section-title {
+      font-size: 52px;
+    }
+
+    .page-d .section-copy {
+      margin-top: 12px;
+      font-size: 16px;
+      line-height: 1.48;
+      max-width: 460px;
+    }
+
+    .page-d .findings-layout {
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .page-d .feature-card {
+      min-height: 372px;
+    }
+
+    .page-d .feature-main,
+    .page-d .feature-side {
+      padding: 20px;
+    }
+
+    .page-d .finding-title {
+      margin-top: 14px;
+      font-size: 32px;
+      max-width: 300px;
+    }
+
+    .page-d .finding-copy {
+      margin-top: 12px;
+      max-width: 320px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .page-d .meta-strip {
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+    .page-d .evidence-box {
+      margin-top: 14px;
+      padding: 12px 14px;
+    }
+
+    .page-d .evidence-copy {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .page-d .step-list {
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .page-d .step {
+      padding: 10px 0;
+    }
+
+    .page-d .finding-grid {
+      gap: 10px;
+    }
+
+    .page-d .finding-mini {
+      padding: 18px;
+      min-height: 208px;
+    }
+
+    .page-d .finding-mini h3 {
+      margin-top: 12px;
+      font-size: 22px;
+      max-width: 220px;
+    }
+
+    .page-d .mini-copy {
+      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .page-d .mini-divider {
+      margin: 14px 0 10px;
+    }
+
+    .topbar,
+    .footer {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .topbar {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+    }
+
+    .brand-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--signal);
+      box-shadow: 0 0 0 4px rgba(207, 69, 0, 0.12);
+    }
+
+    .nav {
+      display: inline-flex;
+      gap: 18px;
+      padding: 8px 16px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(20, 20, 19, 0.08);
+      background: rgba(255, 255, 255, 0.76);
+      backdrop-filter: blur(18px);
+      font-weight: 500;
+    }
+
+    .nav span {
+      white-space: nowrap;
+    }
+
+    .meta-pill,
+    .eyebrow,
+    .kicker,
+    .tag,
+    .severity-pill,
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+    }
+
+    .meta-pill {
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(20, 20, 19, 0.08);
+      backdrop-filter: blur(18px);
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .eyebrow {
+      width: fit-content;
+      padding: 7px 12px;
+      background: var(--signal-soft);
+      color: var(--signal);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .eyebrow::before,
+    .kicker::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.9;
+    }
+
+    .kicker {
+      width: fit-content;
+      padding: 7px 0;
+      color: var(--signal);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .tag {
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(20, 20, 19, 0.08);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-soft);
+    }
+
+    .tag.dark,
+    .severity-pill.high {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+    }
+
+    .tag.blue {
+      background: rgba(56, 96, 190, 0.1);
+      color: var(--blue);
+      border-color: rgba(56, 96, 190, 0.18);
+    }
+
+    .tag.signal {
+      background: var(--signal-soft);
+      color: var(--signal);
+      border-color: rgba(207, 69, 0, 0.16);
+    }
+
+    .chip {
+      padding: 7px 11px;
+      background: rgba(20, 20, 19, 0.06);
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .chip.mono {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 28px;
+      margin-top: 42px;
+      align-items: start;
+    }
+
+    .hero-copy {
+      padding-top: 20px;
+    }
+
+    .display {
+      max-width: 420px;
+      font-size: 78px;
+      line-height: 0.94;
+      letter-spacing: -0.05em;
+      font-weight: 800;
+    }
+
+    .display .it,
+    .section-title .it,
+    .stat-strip strong .it,
+    .metric-value .it,
+    .quote .it {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-style: italic;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+    }
+
+    .stat-strip strong .it {
+      font-size: 0.72em;
+      position: relative;
+      top: -0.04em;
+    }
+
+    .lede {
+      max-width: 370px;
+      margin-top: 24px;
+      font-size: 19px;
+      line-height: 1.55;
+      color: rgba(20, 20, 19, 0.72);
+    }
+
+    .hero-support {
+      position: relative;
+      min-height: 670px;
+    }
+
+    .orbital-stage {
+      position: absolute;
+      inset: 0;
+    }
+
+    .orbital-stage::before,
+    .orbital-stage::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .orbital-stage::before {
+      width: 470px;
+      height: 470px;
+      right: -70px;
+      top: 18px;
+      border: 1px solid rgba(207, 69, 0, 0.22);
+    }
+
+    .orbital-stage::after {
+      width: 250px;
+      height: 250px;
+      right: 36px;
+      top: 132px;
+      border: 1px solid rgba(56, 96, 190, 0.18);
+    }
+
+    .risk-orb {
+      position: absolute;
+      top: 36px;
+      right: 0;
+      width: 330px;
+      height: 420px;
+      border-radius: 46% 54% 56% 44% / 46% 42% 58% 54%;
+      background:
+        radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.96) 0 12%, transparent 13%),
+        radial-gradient(circle at 44% 34%, rgba(243, 115, 56, 0.9) 0 18%, rgba(207, 69, 0, 0.94) 19% 36%, rgba(243, 190, 145, 0.9) 37% 45%, transparent 46%),
+        radial-gradient(circle at 58% 58%, rgba(20, 20, 19, 0.86) 0 8%, transparent 9%),
+        linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(248, 236, 228, 0.98));
+      box-shadow: 0 40px 80px rgba(207, 69, 0, 0.18);
+      overflow: hidden;
+    }
+
+    .risk-orb::after {
+      content: "";
+      position: absolute;
+      inset: 16px;
+      border-radius: inherit;
+      border: 1px solid rgba(255, 255, 255, 0.52);
+    }
+
+    .floating-card {
+      position: absolute;
+      z-index: 3;
+      width: 222px;
+      border-radius: 26px;
+      background: rgba(255, 255, 255, 0.84);
+      border: 1px solid rgba(20, 20, 19, 0.08);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow-soft);
+      padding: 18px 18px 16px;
+    }
+
+    .floating-card.small {
+      width: 176px;
+      padding: 14px 16px;
+    }
+
+    .floating-card.one {
+      top: 10px;
+      left: 4px;
+    }
+
+    .floating-card.two {
+      width: 236px;
+      right: 10px;
+      bottom: 196px;
+    }
+
+    .floating-card.three {
+      left: 14px;
+      bottom: 28px;
+    }
+
+    .floating-card h3,
+    .metric-label {
+      font-size: 12px;
+      line-height: 1.1;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: rgba(20, 20, 19, 0.58);
+      font-weight: 700;
+    }
+
+    .metric-value {
+      margin-top: 12px;
+      font-size: 44px;
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .metric-copy {
+      margin-top: 10px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: rgba(20, 20, 19, 0.72);
+    }
+
+    .stat-strip {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr) 1.15fr;
+      gap: 12px;
+      margin-top: 44px;
+      padding: 20px;
+      border-radius: 30px;
+      background: rgba(255, 255, 255, 0.84);
+      border: 1px solid rgba(20, 20, 19, 0.08);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow-premium);
+    }
+
+    .stat-strip-item {
+      padding-right: 8px;
+      border-right: 1px solid rgba(20, 20, 19, 0.07);
+    }
+
+    .stat-strip-item:last-child {
+      border-right: 0;
+      padding-right: 0;
+    }
+
+    .stat-strip strong {
+      display: block;
+      font-size: 36px;
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+
+    .stat-strip span {
+      display: block;
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.45;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: rgba(20, 20, 19, 0.56);
+      font-weight: 700;
+    }
+
+    .footer {
+      position: absolute;
+      left: 42px;
+      right: 42px;
+      bottom: 30px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(20, 20, 19, 0.08);
+      font-size: 12px;
+      color: rgba(20, 20, 19, 0.55);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      z-index: 3;
+    }
+
+    .section-head {
+      position: relative;
+      z-index: 2;
+      margin-top: 30px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: end;
+    }
+
+    .section-title {
+      max-width: 520px;
+      font-size: 56px;
+      line-height: 0.98;
+      letter-spacing: -0.045em;
+      font-weight: 800;
+    }
+
+    .section-copy {
+      margin-top: 14px;
+      max-width: 500px;
+      font-size: 18px;
+      line-height: 1.55;
+      color: rgba(20, 20, 19, 0.72);
+    }
+
+    .split-layout {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 1.04fr 0.96fr;
+      gap: 18px;
+      margin-top: 28px;
+      align-items: start;
+    }
+
+    .panel,
+    .dark-panel,
+    .feature-card,
+    .finding-card,
+    .finding-mini,
+    .severity-board,
+    .visual-card {
+      position: relative;
+      z-index: 2;
+      border-radius: 30px;
+      overflow: hidden;
+    }
+
+    .panel,
+    .feature-card,
+    .finding-card,
+    .finding-mini,
+    .severity-board,
+    .visual-card {
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(20, 20, 19, 0.08);
+      box-shadow: var(--shadow-premium);
+      backdrop-filter: blur(16px);
+    }
+
+    .panel {
+      padding: 24px;
+    }
+
+    .panel-title,
+    .mini-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: rgba(20, 20, 19, 0.56);
+      font-weight: 700;
+    }
+
+    .quote {
+      margin-top: 18px;
+      font-size: 32px;
+      line-height: 1.12;
+      letter-spacing: -0.04em;
+      font-weight: 700;
+      max-width: 360px;
+    }
+
+    .body-copy {
+      margin-top: 16px;
+      font-size: 16px;
+      line-height: 1.6;
+      color: rgba(20, 20, 19, 0.72);
+    }
+
+    .priority-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .priority-item {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 14px;
+      align-items: start;
+      padding: 14px;
+      border-radius: 22px;
+      background: rgba(20, 20, 19, 0.04);
+      border: 1px solid rgba(20, 20, 19, 0.06);
+    }
+
+    .priority-item .num,
+    .step .num {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .priority-item p,
+    .lens-row p,
+    .flow-node p,
+    .step p,
+    .finding-copy,
+    .evidence-copy,
+    .mini-copy,
+    .asset-row span,
+    .legend-row {
+      font-size: 15px;
+      line-height: 1.5;
+      color: rgba(20, 20, 19, 0.76);
+    }
+
+    .dark-panel {
+      padding: 26px;
+      background: var(--ink);
+      color: #fff;
+      box-shadow: 0 28px 56px rgba(20, 20, 19, 0.18);
+    }
+
+    .dark-panel .panel-title,
+    .dark-panel .mini-title {
+      color: rgba(255, 255, 255, 0.62);
+    }
+
+    .score-display {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .score-wheel {
+      width: 170px;
+      height: 170px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center, #141413 0 45px, transparent 46px),
+        conic-gradient(var(--signal-bright) 0 68%, rgba(255, 255, 255, 0.13) 68% 100%);
+      display: grid;
+      place-items: center;
+      box-shadow: inset 0 0 0 12px rgba(255, 255, 255, 0.08);
+    }
+
+    .score-wheel strong {
+      display: block;
+      font-size: 56px;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      color: #fff;
+      text-align: center;
+    }
+
+    .score-wheel span {
+      display: block;
+      margin-top: 6px;
+      text-align: center;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+    }
+
+    .lens-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .lens-row {
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+    }
+
+    .lens-row:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    .lens-row strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
+
+    .dark-panel .lens-row p {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .flow-track {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .flow-node {
+      position: relative;
+      min-height: 174px;
+      padding: 18px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(20, 20, 19, 0.08);
+      box-shadow: var(--shadow-premium);
+    }
+
+    .flow-node::after {
+      content: "→";
+      position: absolute;
+      right: -10px;
+      top: 22px;
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 28px;
+      color: var(--signal);
+    }
+
+    .flow-node:last-child::after {
+      display: none;
+    }
+
+    .flow-node strong {
+      display: block;
+      margin-top: 18px;
+      font-size: 22px;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+    }
+
+    .visual-grid {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 18px;
+      margin-top: 28px;
+      align-items: start;
+    }
+
+    .visual-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .severity-board {
+      padding: 24px;
+      min-height: 424px;
+    }
+
+    .severity-stage {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      align-items: end;
+      gap: 12px;
+      height: 270px;
+      margin-top: 26px;
+    }
+
+    .severity-col {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+    }
+
+    .severity-bar {
+      position: relative;
+      width: 74px;
+      border-radius: 28px 28px 16px 16px;
+      background: linear-gradient(180deg, rgba(243, 115, 56, 0.95), rgba(207, 69, 0, 1));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    }
+
+    .severity-bar.low,
+    .severity-bar.info {
+      background: linear-gradient(180deg, rgba(244, 190, 140, 0.85), rgba(247, 158, 27, 0.95));
+    }
+
+    .severity-bar.info {
+      background: linear-gradient(180deg, rgba(97, 130, 204, 0.8), rgba(56, 96, 190, 0.95));
+    }
+
+    .severity-bar::before {
+      content: attr(data-count);
+      position: absolute;
+      top: -32px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(20, 20, 19, 0.58);
+    }
+
+    .bar-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+      color: rgba(20, 20, 19, 0.56);
+    }
+
+    .annotation {
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: 20px;
+      background: rgba(20, 20, 19, 0.05);
+      font-size: 14px;
+      line-height: 1.5;
+      color: rgba(20, 20, 19, 0.72);
+    }
+
+    .visual-card {
+      padding: 22px;
+    }
+
+    .donut-wrap {
+      display: grid;
+      justify-items: center;
+      gap: 18px;
+      margin-top: 12px;
+    }
+
+    .donut {
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.96) 0 64px, transparent 65px),
+        conic-gradient(var(--signal) 0 36%, var(--amber) 36% 66%, var(--blue) 66% 100%);
+    }
+
+    .legend {
+      display: grid;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .legend-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+
+    .inventory {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+      align-items: end;
+      min-height: 160px;
+    }
+
+    .inventory-col {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+    }
+
+    .inventory-bar {
+      width: 58px;
+      border-radius: 20px 20px 12px 12px;
+      background: linear-gradient(180deg, rgba(20, 20, 19, 0.86), rgba(20, 20, 19, 1));
+    }
+
+    .inventory-col:nth-child(2) .inventory-bar,
+    .inventory-col:nth-child(4) .inventory-bar {
+      background: linear-gradient(180deg, rgba(243, 115, 56, 0.88), rgba(207, 69, 0, 1));
+    }
+
+    .asset-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .asset-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .asset-row span {
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .asset-row strong {
+      font-size: 13px;
+      font-family: "JetBrains Mono", monospace;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+
+    .asset-row b {
+      min-width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(243, 115, 56, 0.16);
+      color: #fff;
+      font-size: 12px;
+    }
+
+    .findings-layout {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .feature-card {
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 0;
+      min-height: 398px;
+    }
+
+    .feature-main {
+      padding: 24px;
+      background:
+        radial-gradient(circle at top right, rgba(243, 115, 56, 0.18) 0 22%, transparent 23%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(248, 236, 228, 0.82));
+    }
+
+    .feature-side {
+      padding: 24px;
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .severity-pill {
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .severity-pill.medium {
+      background: rgba(247, 158, 27, 0.14);
+      color: #a46106;
+    }
+
+    .finding-title {
+      margin-top: 18px;
+      max-width: 320px;
+      font-size: 36px;
+      line-height: 0.98;
+      letter-spacing: -0.05em;
+      font-weight: 800;
+    }
+
+    .finding-copy {
+      margin-top: 14px;
+      max-width: 340px;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .evidence-box {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 22px;
+      background: rgba(20, 20, 19, 0.05);
+      border: 1px solid rgba(20, 20, 19, 0.07);
+    }
+
+    .evidence-box h4,
+    .feature-side h4 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 700;
+      color: rgba(20, 20, 19, 0.56);
+    }
+
+    .evidence-copy {
+      margin-top: 10px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      color: rgba(20, 20, 19, 0.76);
+    }
+
+    .meta-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .step-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 11px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .step:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    .step p {
+      color: rgba(255, 255, 255, 0.76);
+    }
+
+    .step .num {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .finding-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .finding-mini {
+      padding: 20px;
+      min-height: 238px;
+    }
+
+    .finding-mini h3 {
+      margin-top: 14px;
+      font-size: 26px;
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+      max-width: 240px;
+    }
+
+    .mini-copy {
+      margin-top: 12px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .mini-divider {
+      margin: 16px 0 12px;
+      height: 1px;
+      background: rgba(20, 20, 19, 0.08);
+    }
+
+    .print-note {
+      position: relative;
+      z-index: 2;
+      margin-top: 18px;
+      font-size: 14px;
+      line-height: 1.55;
+      color: rgba(20, 20, 19, 0.58);
+    }
+
+    @media print {
+      html,
+      body {
+        background: var(--canvas);
+      }
+
+      body {
+        padding: 0;
+      }
+
+      .stack {
+        gap: 0;
+      }
+
+      .page {
+        margin: 0;
+        box-shadow: none;
+        break-after: page;
+        page-break-after: always;
+      }
+
+      .page:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="stack">
+    <section class="page page-a">
+      <div class="topbar">
+        <div class="brand"><span class="brand-dot"></span><span>scanai</span></div>
+        <div class="nav"><span>Summary</span><span>Visuals</span><span>Findings</span></div>
+        <div class="meta-pill">Security Memo · example.com</div>
+      </div>
+
+      <div class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow">Public attack surface memo</div>
+          <h1 class="display">
+            What an attacker
+            <span class="it">would notice</span>
+            first.
+          </h1>
+          <p class="lede">
+            A short, high-confidence read on the weaknesses that matter most for example.com,
+            distilled from surface discovery, TLS inspection, and live web checks.
+          </p>
+        </div>
+
+        <div class="hero-support">
+          <div class="orbital-stage"></div>
+          <div class="risk-orb"></div>
+
+          <div class="floating-card one">
+            <h3>Exposure grade</h3>
+            <div class="metric-value">68<span class="it">/100</span></div>
+            <p class="metric-copy">Not catastrophic, but loose enough to deserve prompt cleanup.</p>
+          </div>
+
+          <div class="floating-card two">
+            <h3>Primary threat path</h3>
+            <p class="metric-copy">
+              Legacy TLS posture and missing browser headers create the clearest opening for low-effort abuse.
+            </p>
+          </div>
+
+          <div class="floating-card small three">
+            <h3>Verification</h3>
+            <div class="metric-value" style="font-size:36px;">2 <span class="it">real</span></div>
+            <p class="metric-copy">issues survived filtering and deduping.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-strip">
+        <div class="stat-strip-item">
+          <strong>02</strong>
+          <span>Verified findings</span>
+        </div>
+        <div class="stat-strip-item">
+          <strong>01</strong>
+          <span>High-severity item</span>
+        </div>
+        <div class="stat-strip-item">
+          <strong>05</strong>
+          <span>Exposure signals reviewed</span>
+        </div>
+        <div class="stat-strip-item">
+          <strong>72<span class="it">h</span></strong>
+          <span>Suggested remediation window</span>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>ScanAI · security memo · 9:16 concept</span>
+        <span>01</span>
+      </div>
+    </section>
+
+    <section class="page page-b">
+      <div class="topbar">
+        <div class="brand"><span class="brand-dot"></span><span>scanai</span></div>
+        <div class="kicker">01 exposure story</div>
+        <div class="meta-pill">Generated · May 05, 2026</div>
+      </div>
+
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">The report in one <span class="it">page</span>.</h2>
+          <p class="section-copy">
+            The scan did not uncover broad compromise, but it did surface the kind of preventable
+            posture gaps that make opportunistic attacks cheaper and more repeatable.
+          </p>
+        </div>
+        <div class="tag dark">Owner-facing summary</div>
+      </div>
+
+      <div class="split-layout">
+        <div class="panel">
+          <div class="panel-title">Executive readout</div>
+          <div class="quote">
+            “This is a contained risk profile with one <span class="it">urgent</span> transport issue
+            and one <span class="it">important</span> browser-hardening gap.”
+          </div>
+          <p class="body-copy">
+            The good news is that the surface is relatively small. The bad news is that the issues
+            found are easy for commodity scanners to detect, which means they are also easy for
+            attackers to keep probing over time.
+          </p>
+
+          <div class="priority-list">
+            <div class="priority-item">
+              <div class="num">1</div>
+              <p>Disable TLS 1.0 and TLS 1.1 on the public endpoint and re-check ciphers.</p>
+            </div>
+            <div class="priority-item">
+              <div class="num">2</div>
+              <p>Add HSTS and Content-Security-Policy across primary application responses.</p>
+            </div>
+            <div class="priority-item">
+              <div class="num">3</div>
+              <p>Re-run the exact scan pack after remediation and archive the clean memo for proof.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="dark-panel">
+          <div class="panel-title">Risk lens</div>
+          <div class="score-display">
+            <div class="score-wheel">
+              <div>
+                <strong>68</strong>
+                <span>risk index</span>
+              </div>
+            </div>
+            <div class="lens-grid">
+              <div class="lens-row">
+                <strong>Exposure quality</strong>
+                <p>Small surface, but the issues found are concrete and externally visible.</p>
+              </div>
+              <div class="lens-row">
+                <strong>Exploit effort</strong>
+                <p>Low to moderate. No exotic chain required to observe either issue.</p>
+              </div>
+              <div class="lens-row">
+                <strong>Business posture</strong>
+                <p>Safe enough for continued operation, not polished enough for comfort.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-track">
+        <div class="flow-node">
+          <div class="mini-title">01 discover</div>
+          <strong>One live public host</strong>
+          <p>Discovery confirmed a narrow but reachable public surface.</p>
+        </div>
+        <div class="flow-node">
+          <div class="mini-title">02 negotiate</div>
+          <strong>Legacy TLS still answers</strong>
+          <p>The transport layer still accepts protocols that should already be retired.</p>
+        </div>
+        <div class="flow-node">
+          <div class="mini-title">03 fingerprint</div>
+          <strong>App headers feel under-hardened</strong>
+          <p>Browser-facing protections are light, which weakens defense in depth.</p>
+        </div>
+        <div class="flow-node">
+          <div class="mini-title">04 validate</div>
+          <strong>Two issues remain after filtering</strong>
+          <p>Noise was removed so the final memo focuses on likely owner action, not raw scanner volume.</p>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>ScanAI · analysis spread</span>
+        <span>02</span>
+      </div>
+    </section>
+
+    <section class="page page-c">
+      <div class="topbar">
+        <div class="brand"><span class="brand-dot"></span><span>scanai</span></div>
+        <div class="kicker">02 evidence visuals</div>
+        <div class="meta-pill">Charts built from completed scan</div>
+      </div>
+
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Security picture at a <span class="it">glance</span>.</h2>
+          <p class="section-copy">
+            The report should feel visual, so the spread below turns the scan into an owner-readable
+            shape instead of a long text wall.
+          </p>
+        </div>
+        <div class="tag blue">Graph-first layout</div>
+      </div>
+
+      <div class="visual-grid">
+        <div class="visual-stack">
+          <div class="severity-board">
+            <div class="panel-title">Findings by severity</div>
+            <div class="severity-stage">
+              <div class="severity-col">
+                <div class="severity-bar" data-count="0" style="height: 28px;"></div>
+                <div class="bar-label">Critical</div>
+              </div>
+              <div class="severity-col">
+                <div class="severity-bar" data-count="1" style="height: 176px;"></div>
+                <div class="bar-label">High</div>
+              </div>
+              <div class="severity-col">
+                <div class="severity-bar low" data-count="1" style="height: 128px;"></div>
+                <div class="bar-label">Medium</div>
+              </div>
+              <div class="severity-col">
+                <div class="severity-bar low" data-count="0" style="height: 36px;"></div>
+                <div class="bar-label">Low</div>
+              </div>
+              <div class="severity-col">
+                <div class="severity-bar info" data-count="3" style="height: 222px;"></div>
+                <div class="bar-label">Signals</div>
+              </div>
+            </div>
+            <div class="annotation">
+              The scan is not noisy in the final layer: one transport issue leads the board, while
+              the rest of the evidence clusters around weaker hardening rather than deeper compromise.
+            </div>
+          </div>
+
+          <div class="visual-card">
+            <div class="panel-title">Attack surface inventory</div>
+            <div class="inventory">
+              <div class="inventory-col">
+                <div class="inventory-bar" style="height: 72px;"></div>
+                <div class="bar-label">Hosts</div>
+              </div>
+              <div class="inventory-col">
+                <div class="inventory-bar" style="height: 118px;"></div>
+                <div class="bar-label">Ports</div>
+              </div>
+              <div class="inventory-col">
+                <div class="inventory-bar" style="height: 154px;"></div>
+                <div class="bar-label">Pages</div>
+              </div>
+              <div class="inventory-col">
+                <div class="inventory-bar" style="height: 96px;"></div>
+                <div class="bar-label">TLS</div>
+              </div>
+            </div>
+            <p class="print-note">
+              This is the kind of visual panel that should occupy real space in the final PDF rather
+              than being buried as metadata.
+            </p>
+          </div>
+        </div>
+
+        <div class="visual-stack">
+          <div class="visual-card">
+            <div class="panel-title">Finding mix</div>
+            <div class="donut-wrap">
+              <div class="donut"></div>
+              <div class="legend">
+                <div class="legend-row">
+                  <div class="legend-label"><span class="swatch" style="background:#cf4500;"></span><span>TLS posture</span></div>
+                  <strong>36%</strong>
+                </div>
+                <div class="legend-row">
+                  <div class="legend-label"><span class="swatch" style="background:#f79e1b;"></span><span>Header hardening</span></div>
+                  <strong>30%</strong>
+                </div>
+                <div class="legend-row">
+                  <div class="legend-label"><span class="swatch" style="background:#3860be;"></span><span>Supporting signals</span></div>
+                  <strong>34%</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dark-panel">
+            <div class="panel-title">Most exposed assets</div>
+            <div class="asset-list">
+              <div class="asset-row">
+                <div>
+                  <strong>https://example.com:443</strong>
+                  <span>TLS issue anchor</span>
+                </div>
+                <b>1</b>
+              </div>
+              <div class="asset-row">
+                <div>
+                  <strong>https://example.com</strong>
+                  <span>Header hardening gap</span>
+                </div>
+                <b>1</b>
+              </div>
+              <div class="asset-row">
+                <div>
+                  <strong>/</strong>
+                  <span>Primary route sampled</span>
+                </div>
+                <b>2</b>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-card">
+            <div class="panel-title">Owner note</div>
+            <div class="quote" style="font-size:28px; max-width:none;">
+              “Keep the charts, but make each one carry a <span class="it">decision</span>.”
+            </div>
+            <p class="body-copy">
+              That means fewer decorative widgets and more panels that clearly answer: how bad, where,
+              how widespread, and what to fix first.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>ScanAI · visual spread</span>
+        <span>03</span>
+      </div>
+    </section>
+
+    <section class="page page-d">
+      <div class="topbar">
+        <div class="brand"><span class="brand-dot"></span><span>scanai</span></div>
+        <div class="kicker">03 detailed findings</div>
+        <div class="meta-pill">Two issues worth owner attention</div>
+      </div>
+
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Findings should read like <span class="it">evidence</span>, not filler.</h2>
+          <p class="section-copy">
+            The detailed section should keep the deck quality while still staying operationally useful.
+          </p>
+        </div>
+        <div class="tag signal">High-confidence narrative</div>
+      </div>
+
+      <div class="findings-layout">
+        <div class="feature-card">
+          <div class="feature-main">
+            <div class="severity-pill high">High severity</div>
+            <h3 class="finding-title">Weak TLS settings remain enabled on the public endpoint.</h3>
+            <p class="finding-copy">
+              Older protocol support widens the window for downgrade or compatibility-based abuse and
+              sends a clear signal that the edge is not fully modernized.
+            </p>
+
+            <div class="meta-strip">
+              <span class="tag mono">Category · TLS</span>
+              <span class="tag mono">Affected · example.com:443</span>
+              <span class="tag mono">Confidence · verified</span>
+            </div>
+
+            <div class="evidence-box">
+              <h4>Observed evidence</h4>
+              <p class="evidence-copy">
+                testssl reported TLS 1.0 as negotiated on the public host, alongside weaker legacy
+                compatibility settings that should no longer be customer-facing.
+              </p>
+            </div>
+          </div>
+
+          <div class="feature-side">
+            <h4>Remediation path</h4>
+            <div class="step-list">
+              <div class="step">
+                <div class="num">1</div>
+                <p>Disable TLS 1.0 and TLS 1.1 across the public listener and inherited edge policies.</p>
+              </div>
+              <div class="step">
+                <div class="num">2</div>
+                <p>Retain only modern cipher suites and verify they align with current client support policy.</p>
+              </div>
+              <div class="step">
+                <div class="num">3</div>
+                <p>Re-scan the same host and archive the clean result as a compliance-ready follow-up memo.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="finding-grid">
+          <div class="finding-mini">
+            <div class="severity-pill medium">Medium severity</div>
+            <h3>Important browser security headers are missing.</h3>
+            <p class="mini-copy">
+              The site responds without enough browser hardening, which lowers the cost of abuse if a
+              second flaw appears later.
+            </p>
+            <div class="mini-divider"></div>
+            <div class="mini-title">Evidence</div>
+            <p class="evidence-copy" style="margin-top:10px;">
+              nuclei reported missing HSTS and Content-Security-Policy on the main application route.
+            </p>
+          </div>
+
+          <div class="finding-mini">
+            <div class="mini-title">Recommended owner move</div>
+            <h3 style="max-width:300px;">Harden headers as part of the next deploy, not a later backlog.</h3>
+            <p class="mini-copy">
+              This is inexpensive to fix and meaningfully improves the overall impression of the public edge.
+            </p>
+            <div class="meta-strip">
+              <span class="tag">Add HSTS</span>
+              <span class="tag">Add CSP</span>
+              <span class="tag">Verify on key routes</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>ScanAI · findings spread</span>
+        <span>04</span>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

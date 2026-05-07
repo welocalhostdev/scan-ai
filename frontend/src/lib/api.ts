@@ -29,7 +29,9 @@ export interface ScanCreateResponse {
 export interface Finding {
   id: string;
   title: string;
+  category?: string;
   severity: "critical" | "high" | "medium" | "low" | "info";
+  evidence?: string;
   what_it_means: string;
   how_to_fix: string[];
   affected: string;
@@ -38,14 +40,18 @@ export interface Finding {
 export interface ScanReport {
   summary: string;
   risk_score: number;
+  priority_actions?: string[];
   findings: Finding[];
 }
+
+export type SubTaskStatus = "pending" | "running" | "complete" | "failed";
 
 export interface ScanStatusResponse {
   id: string;
   url: string;
   status: "pending" | "running" | "complete" | "failed";
   progress_step: number;
+  sub_tasks: Record<string, SubTaskStatus> | null;
   report: ScanReport | null;
   error: string | null;
   created_at: string;
@@ -73,6 +79,9 @@ export interface AdminScan {
   url: string;
   status: string;
   progress_step: number;
+  error: string | null;
+  pdf_url: string | null;
+  report: ScanReport | null;
   created_at: string;
   user_email: string | null;
   user_name: string | null;
@@ -80,6 +89,13 @@ export interface AdminScan {
 
 export interface ApiError {
   detail: string;
+}
+
+export interface AdminScanPDFResponse {
+  pdf_url: string;
+  view_url: string;
+  download_url: string;
+  message: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -174,4 +190,59 @@ export async function getAdminScans(): Promise<AdminScan[]> {
 
 export async function deleteAdminUser(userId: string): Promise<void> {
   await apiFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+}
+
+export async function generateAdminScanPDF(scanId: string): Promise<AdminScanPDFResponse> {
+  return apiFetch<AdminScanPDFResponse>(`/api/admin/scans/${scanId}/generate-pdf`, {
+    method: "POST",
+  });
+}
+
+export function getAdminScanPDFViewUrl(scanId: string): string {
+  return `/api/admin/scans/${scanId}/pdf`;
+}
+
+export function getAdminScanPDFDownloadUrl(scanId: string): string {
+  return `/api/admin/scans/${scanId}/pdf?download=1`;
+}
+
+// ── Token Usage API ──────────────────────────────────────────────
+
+export interface TokenUsageRecord {
+  id: string;
+  scan_id: string;
+  user_id: string | null;
+  user_email: string | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  model: string | null;
+  estimated_cost: string | null;
+  created_at: string;
+}
+
+export interface TokenUsageByUser {
+  user_id: string;
+  user_email: string;
+  total_tokens: number;
+  scan_count: number;
+}
+
+export interface TokenUsageByModel {
+  model: string;
+  total_tokens: number;
+  scan_count: number;
+}
+
+export interface TokenUsageStats {
+  total_tokens_all_time: number;
+  total_scans: number;
+  total_cost_estimate: string;
+  by_user: TokenUsageByUser[];
+  by_model: TokenUsageByModel[];
+  recent_usage: TokenUsageRecord[];
+}
+
+export async function getTokenUsageStats(): Promise<TokenUsageStats> {
+  return apiFetch<TokenUsageStats>("/api/admin/token-usage");
 }

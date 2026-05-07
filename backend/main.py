@@ -9,7 +9,7 @@ from typing import Any, List, Optional
 from uuid import UUID
 
 import redis
-from fastapi import FastAPI, HTTPException, Depends, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
@@ -17,7 +17,7 @@ from sqlalchemy import func
 
 from config import settings
 from database import init_db, get_db
-from models import Scan, ScanStatus, User, UserRole
+from models import Scan, ScanStatus, User, UserRole, TokenUsage
 from validators import validate_url, URLValidationError
 from auth import (
     hash_password,
@@ -115,6 +115,7 @@ class ScanStatusResponse(BaseModel):
     url: str
     status: str
     progress_step: int
+    sub_tasks: dict[str, str] | None = None  # tool_key -> status
     report: dict[str, Any] | None = None
     error: str | None = None
     created_at: str
@@ -143,6 +144,9 @@ class AdminScanResponse(BaseModel):
     url: str
     status: str
     progress_step: int
+    error: str | None = None
+    pdf_url: str | None = None
+    report: dict | None = None
     created_at: str
     user_email: str | None = None
     user_name: str | None = None
@@ -222,6 +226,19 @@ def _user_to_response(user: User) -> UserResponse:
         is_active=user.is_active,
         created_at=user.created_at.isoformat(),
     )
+
+
+def _get_scan_or_404(db: Session, scan_id: str) -> Scan:
+    """Load a scan by UUID or raise a consistent HTTP error."""
+    try:
+        scan_uuid = UUID(scan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid scan ID format.")
+
+    scan = db.query(Scan).filter(Scan.id == scan_uuid).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found.")
+    return scan
 
 
 # ── Health ─────────────────────────────────────────────────────────
@@ -425,6 +442,7 @@ async def get_scan_status(
         url=scan.url,
         status=scan.status.value,
         progress_step=scan.progress_step,
+        sub_tasks=scan.sub_tasks,
         report=scan.report,
         error=scan.error,
         created_at=scan.created_at.isoformat(),
@@ -530,12 +548,99 @@ async def admin_list_scans(
             url=s.url,
             status=s.status.value,
             progress_step=s.progress_step,
+            error=s.error,
+            pdf_url=s.pdf_url,
+            report=s.report,
             created_at=s.created_at.isoformat(),
             user_email=s.user.email if s.user else None,
             user_name=s.user.name if s.user else None,
         )
         for s in scans
     ]
+
+
+@app.post("/api/admin/scans/{scan_id}/generate-pdf")
+async def admin_generate_pdf(
+    scan_id: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """
+    Generate and store a PDF report for a completed scan.
+    Only works for scans with status 'complete' and existing report data.
+    """
+    scan = _get_scan_or_404(db, scan_id)
+
+    if scan.status != ScanStatus.COMPLETE:
+        raise HTTPException(
+            status_code=400,
+            detail="PDF can only be generated for completed scans."
+        )
+
+    if not scan.report:
+        raise HTTPException(
+            status_code=400,
+            detail="No report data available for PDF generation."
+        )
+
+    # Import here to avoid loading if not needed
+    from pdf_storage import generate_and_store_pdf
+
+    # Generate and upload PDF
+    stored_pdf_ref = generate_and_store_pdf(
+        scan_id=str(scan.id),
+        url=scan.url,
+        report_data=scan.report,
+    )
+
+    if not stored_pdf_ref:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate or upload PDF. Check MinIO configuration."
+        )
+
+    view_url = f"/api/admin/scans/{scan.id}/pdf"
+    download_url = f"{view_url}?download=1"
+
+    # Store the internal object reference instead of a public MinIO URL.
+    scan.pdf_url = stored_pdf_ref
+    db.commit()
+
+    return {
+        "pdf_url": view_url,
+        "view_url": view_url,
+        "download_url": download_url,
+        "message": "PDF generated and stored successfully.",
+    }
+
+
+@app.get("/api/admin/scans/{scan_id}/pdf")
+async def admin_get_pdf(
+    scan_id: str,
+    download: bool = Query(False),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Stream a generated PDF through the app instead of exposing MinIO directly."""
+    scan = _get_scan_or_404(db, scan_id)
+
+    if not scan.pdf_url:
+        raise HTTPException(status_code=404, detail="No generated PDF is available for this scan yet.")
+
+    from pdf_storage import fetch_pdf_from_minio
+
+    pdf_bytes = fetch_pdf_from_minio(str(scan.id))
+    if not pdf_bytes:
+        raise HTTPException(status_code=404, detail="Stored PDF could not be retrieved.")
+
+    filename = f"scanai-report-{str(scan.id)[:8]}.pdf"
+    disposition = "attachment" if download else "inline"
+    headers = {
+        "Content-Disposition": f'{disposition}; filename="{filename}"',
+        "Cache-Control": "private, max-age=300",
+    }
+
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
 @app.delete("/api/admin/users/{user_id}")
@@ -563,3 +668,164 @@ async def admin_delete_user(
     logger.info(f"Admin {admin.email} deleted user {target.email}")
 
     return {"message": f"User {target.email} deleted."}
+
+
+# ── Token Usage Admin Endpoints ───────────────────────────────────
+
+class TokenUsageResponse(BaseModel):
+    """Single token usage record response."""
+    id: str
+    scan_id: str
+    user_id: str | None
+    user_email: str | None
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    model: str | None
+    estimated_cost: str | None
+    created_at: str
+
+
+class TokenUsageStats(BaseModel):
+    """Aggregated token usage statistics."""
+    total_tokens_all_time: int
+    total_scans: int
+    total_cost_estimate: str
+    by_user: list[dict[str, Any]]
+    by_model: list[dict[str, Any]]
+    recent_usage: list[TokenUsageResponse]
+
+
+@app.get("/api/admin/token-usage", response_model=TokenUsageStats)
+async def admin_token_usage_stats(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Get aggregated AI token usage statistics (admin only)."""
+    # Total tokens across all time
+    total_tokens = db.query(func.sum(TokenUsage.total_tokens)).scalar() or 0
+    total_scans = db.query(TokenUsage).count()
+    
+    # Calculate rough cost estimate (provider pricing varies by model and tier)
+    cost_estimate = (total_tokens / 1000) * 0.0015
+    
+    # Usage by user
+    user_stats_query = (
+        db.query(
+            User.id.label("user_id"),
+            User.email.label("user_email"),
+            func.sum(TokenUsage.total_tokens).label("total_tokens"),
+            func.count(TokenUsage.id).label("scan_count"),
+        )
+        .join(TokenUsage, User.id == TokenUsage.user_id)
+        .group_by(User.id, User.email)
+        .order_by(func.sum(TokenUsage.total_tokens).desc())
+        .all()
+    )
+    
+    by_user = [
+        {
+            "user_id": str(row.user_id),
+            "user_email": row.user_email,
+            "total_tokens": row.total_tokens,
+            "scan_count": row.scan_count,
+        }
+        for row in user_stats_query
+    ]
+    
+    # Usage by model
+    model_stats_query = (
+        db.query(
+            TokenUsage.model,
+            func.sum(TokenUsage.total_tokens).label("total_tokens"),
+            func.count(TokenUsage.id).label("scan_count"),
+        )
+        .group_by(TokenUsage.model)
+        .order_by(func.sum(TokenUsage.total_tokens).desc())
+        .all()
+    )
+    
+    by_model = [
+        {
+            "model": row.model or "unknown",
+            "total_tokens": row.total_tokens,
+            "scan_count": row.scan_count,
+        }
+        for row in model_stats_query
+    ]
+    
+    # Recent usage (last 50 records)
+    recent_query = (
+        db.query(TokenUsage)
+        .outerjoin(User, TokenUsage.user_id == User.id)
+        .order_by(TokenUsage.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    
+    recent_usage = [
+        TokenUsageResponse(
+            id=str(t.id),
+            scan_id=str(t.scan_id),
+            user_id=str(t.user_id) if t.user_id else None,
+            user_email=t.user.email if t.user else None,
+            prompt_tokens=t.prompt_tokens,
+            completion_tokens=t.completion_tokens,
+            total_tokens=t.total_tokens,
+            model=t.model,
+            estimated_cost=t.estimated_cost,
+            created_at=t.created_at.isoformat(),
+        )
+        for t in recent_query
+    ]
+    
+    return TokenUsageStats(
+        total_tokens_all_time=total_tokens,
+        total_scans=total_scans,
+        total_cost_estimate=f"${cost_estimate:.4f}",
+        by_user=by_user,
+        by_model=by_model,
+        recent_usage=recent_usage,
+    )
+
+
+@app.get("/api/admin/token-usage/{user_id}")
+async def admin_user_token_usage(
+    user_id: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Get token usage for a specific user (admin only)."""
+    try:
+        target_uuid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format.")
+    
+    user = db.query(User).filter(User.id == target_uuid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    
+    # Get token usage for this user
+    user_tokens = db.query(TokenUsage).filter(TokenUsage.user_id == target_uuid).all()
+    
+    total_tokens = sum(t.total_tokens for t in user_tokens)
+    cost_estimate = (total_tokens / 1000) * 0.0015
+    
+    return {
+        "user_id": user_id,
+        "user_email": user.email,
+        "total_tokens": total_tokens,
+        "scan_count": len(user_tokens),
+        "estimated_cost": f"${cost_estimate:.4f}",
+        "usage_records": [
+            {
+                "scan_id": str(t.scan_id),
+                "prompt_tokens": t.prompt_tokens,
+                "completion_tokens": t.completion_tokens,
+                "total_tokens": t.total_tokens,
+                "model": t.model,
+                "created_at": t.created_at.isoformat(),
+            }
+            for t in user_tokens
+        ],
+    }

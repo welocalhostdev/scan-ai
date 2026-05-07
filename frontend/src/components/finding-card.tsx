@@ -44,9 +44,15 @@ export function FindingCard({ finding, index }: FindingCardProps) {
                     {finding.title}
                   </h3>
                 </div>
-                <p className="text-xs font-mono text-slate-gray/60 truncate bg-ink-black/5 px-2 py-1 rounded-pill inline-block">
-                  {finding.affected}
-                </p>
+                {finding.affected && (
+                  <p className="text-xs font-mono text-slate-gray/60 bg-ink-black/5 px-2 py-1 rounded-pill inline-block max-w-full">
+                    <span className="truncate block" title={finding.affected}>
+                      {finding.affected.length > 60 
+                        ? `${finding.affected.slice(0, 60)}... (${finding.affected.split(',').length} items)`
+                        : finding.affected}
+                    </span>
+                  </p>
+                )}
               </div>
 
               <div className={cn(
@@ -72,7 +78,7 @@ export function FindingCard({ finding, index }: FindingCardProps) {
                     Security Analysis
                   </h4>
                 </div>
-                <p className="text-base leading-relaxed text-slate-gray italic font-serif">
+                <p className="text-base leading-relaxed text-slate-gray italic font-serif break-words">
                   {finding.what_it_means}
                 </p>
               </div>
@@ -91,7 +97,7 @@ export function FindingCard({ finding, index }: FindingCardProps) {
                       <span className="w-6 h-6 rounded-full bg-white border border-ink-black/10 text-ink-black text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                         {i + 1}
                       </span>
-                      <span>{step}</span>
+                      <span className="break-words">{step}</span>
                     </li>
                   ))}
                 </ol>

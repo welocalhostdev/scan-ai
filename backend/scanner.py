@@ -300,9 +300,76 @@ async def run_testssl(url: str, scan_id: str) -> Any:
     return results
 
 
+def _extract_urls_from_katana(items: list[dict[str, Any]]) -> list[str]:
+    urls: list[str] = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        url = (
+            item.get("url")
+            or item.get("endpoint")
+            or item.get("request", {}).get("endpoint")
+            or item.get("matched-at")
+        )
+        if not url:
+            continue
+        url = str(url).strip()
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
+async def run_dalfox(url: str, scan_id: str, crawled_endpoints: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """
+    Active XSS scanning (specialist).
+
+    Uses Dalfox in 'pipe' mode: we feed it a set of discovered URLs (from Katana).
+    Dalfox focuses on reflection/DOM sinks and is a good complement to Nuclei templates.
+
+    Output: JSON Lines (one object per line).
+    """
+    _ensure_output_dir()
+    output_file = _output_path(scan_id, "dalfox")
+
+    endpoints = _extract_urls_from_katana(crawled_endpoints or [])
+    # Dalfox is most useful on parameterized endpoints.
+    candidates = [e for e in endpoints if "?" in e]
+    if not candidates:
+        candidates = endpoints[:50]
+
+    if not candidates:
+        logger.info("dalfox: no endpoints available to scan")
+        return []
+
+    # Limit to avoid runaway time on large sites.
+    candidates = candidates[:120]
+    stdin_data = "\n".join(candidates)
+
+    cmd = [
+        "dalfox",
+        "pipe",
+        "--format", "jsonl",
+        "--silence",
+        "--timeout", "8",
+        "-o", output_file,
+    ]
+
+    # Dalfox can take longer; give it extra time.
+    stdout, stderr, returncode = await _run_subprocess(
+        cmd, timeout=settings.TOOL_TIMEOUT_SECONDS * 2, stdin_data=stdin_data
+    )
+
+    if returncode != 0:
+        logger.warning(f"dalfox returned code {returncode}: {stderr[:500]}")
+
+    results = _parse_jsonl_file(output_file)
+    logger.info(f"dalfox produced {len(results)} potential XSS signals")
+    return results
+
+
 def cleanup_scan_files(scan_id: str) -> None:
     """Remove temporary output files for a completed scan."""
-    suffixes = ["subs", "httpx", "ports", "crawl", "nuclei", "tls"]
+    suffixes = ["subs", "httpx", "ports", "crawl", "nuclei", "tls", "dalfox"]
     for suffix in suffixes:
         filepath = _output_path(scan_id, suffix)
         try:

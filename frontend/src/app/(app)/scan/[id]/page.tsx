@@ -46,13 +46,13 @@ export default function ScanProgressPage() {
   const currentStep = scan?.progress_step ?? 0;
 
   return (
-    <main className="flex-1 flex flex-col items-center justify-center bg-background relative overflow-hidden">
+    <div className="flex-1 flex flex-col items-center justify-center bg-background relative overflow-hidden py-12">
       {/* Ghost Watermark */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[15vw] font-bold text-ink-black opacity-[0.02] select-none pointer-events-none whitespace-nowrap">
         SCANNING
       </div>
 
-      <div className="relative z-10 w-full max-w-3xl mx-auto px-6 py-20 text-center">
+      <div className="relative z-10 w-full max-w-3xl mx-auto px-6 text-center">
         <div className="mb-12 animate-fade-in-up">
           <div className="inline-flex items-center gap-2 px-4 py-1 rounded-pill bg-white border border-ink-black/5 mb-8 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-signal-orange animate-pulse" />
@@ -74,11 +74,15 @@ export default function ScanProgressPage() {
 
         {/* Step Indicator Container */}
         <div className="bg-white rounded-stadium p-12 mb-12 shadow-[0_8px_48px_rgba(0,0,0,0.04)] border border-ink-black/5 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <StepIndicator currentStep={currentStep} failed={isFailed} />
+          <StepIndicator
+            currentStep={currentStep}
+            failed={isFailed}
+            subTasks={scan?.sub_tasks ?? null}
+          />
         </div>
 
         {/* Error / Footer */}
-        <div className="min-h-[80px]">
+        <div className="min-h-20">
           {isFailed ? (
             <div className="space-y-6 animate-fade-in-up">
               {scan?.error && (
@@ -98,7 +102,7 @@ export default function ScanProgressPage() {
           )}
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 

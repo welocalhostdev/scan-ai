@@ -27,6 +27,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
-
+.env
 # Scan output
 /tmp/scanai/

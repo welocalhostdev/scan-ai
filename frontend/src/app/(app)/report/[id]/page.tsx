@@ -41,7 +41,7 @@ function RiskScoreGauge({ score }: { score: number }) {
       </div>
       <div className="flex items-center gap-2 px-4 py-1 rounded-pill border border-ink-black/5 bg-white shadow-sm">
         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-        <span className="text-[10px] font-bold tracking-[0.1em] uppercase text-ink-black">{label}</span>
+        <span className="text-[10px] font-bold tracking-widest uppercase text-ink-black">{label}</span>
       </div>
     </div>
   );
@@ -122,8 +122,71 @@ export default function ReportPage() {
 
   return (
     <main className="flex-1 bg-background relative selection:bg-light-signal-orange selection:text-white">
+      <section className="print-report">
+        <header>
+          <p className="print-kicker">Official Security Report</p>
+          <h1>ScanAI Security Report</h1>
+          <p className="print-url">{scan.url}</p>
+          <p className="print-date">Scanned on {new Date(scan.created_at).toLocaleString()}</p>
+        </header>
+
+        <section className="print-summary">
+          <div>
+            <p className="print-label">Risk Score</p>
+            <p className="print-score">{report.risk_score}/100</p>
+          </div>
+          <div>
+            <p className="print-label">Summary</p>
+            <p>{report.summary}</p>
+          </div>
+        </section>
+
+        {report.priority_actions && report.priority_actions.length > 0 && (
+          <section>
+            <h2>Priority Actions</h2>
+            <ol>
+              {report.priority_actions.map((action, index) => (
+                <li key={`${action}-${index}`}>{action}</li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        <section>
+          <h2>Detailed Findings</h2>
+          {sortedFindings.length === 0 ? (
+            <p>No vulnerabilities were detected in this scan.</p>
+          ) : (
+            sortedFindings.map((finding, index) => (
+              <article key={finding.id} className="print-finding">
+                <div className="print-finding-head">
+                  <h3>{index + 1}. {finding.title}</h3>
+                  <span>{finding.severity}</span>
+                </div>
+                {finding.affected && (
+                  <p><strong>Affected:</strong> {finding.affected}</p>
+                )}
+                {finding.evidence && (
+                  <p><strong>Evidence:</strong> {finding.evidence}</p>
+                )}
+                <p><strong>What it means:</strong> {finding.what_it_means}</p>
+                <div>
+                  <strong>How to fix:</strong>
+                  <ol>
+                    {finding.how_to_fix.map((step, stepIndex) => (
+                      <li key={stepIndex}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              </article>
+            ))
+          )}
+        </section>
+      </section>
+
+      <section className="screen-report">
       {/* Editorial Header */}
-      <div className="pt-32 pb-16 px-6 max-w-7xl mx-auto w-full border-b border-ink-black/5">
+      <div className="pt-8 pb-16 px-6 max-w-7xl mx-auto w-full border-b border-ink-black/5">
         <div className="flex flex-col md:flex-row justify-between items-end gap-8">
           <div className="animate-fade-in-up">
             <div className="flex items-center gap-2 mb-6">
@@ -158,7 +221,7 @@ export default function ReportPage() {
               <RiskScoreGauge score={report.risk_score} />
               <div className="mt-12 space-y-4">
                 <div className="pt-8 border-t border-ink-black/5">
-                  <p className="text-[10px] font-bold tracking-[0.1em] text-ink-black/30 uppercase mb-4 text-left px-2">Findings Breakdown</p>
+                  <p className="text-[10px] font-bold tracking-widest text-ink-black/30 uppercase mb-4 text-left px-2">Findings Breakdown</p>
                   <div className="flex flex-wrap gap-2">
                     {SEVERITY_ORDER.filter((s) => s !== "info").map((severity) => (
                       <SeverityBadge
@@ -224,7 +287,7 @@ export default function ReportPage() {
            Scanned on {new Date(scan.created_at).toLocaleString()}
          </p>
       </footer>
+      </section>
     </main>
   );
 }
-

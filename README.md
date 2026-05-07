@@ -3,14 +3,14 @@
 > Find vulnerabilities before hackers do. AI-powered security scanning with plain-English reports.
 
 ![Stack](https://img.shields.io/badge/Stack-Next.js_+_FastAPI_+_Celery-blue)
-![AI](https://img.shields.io/badge/AI-Gemini_2.5_Flash-purple)
+![AI](https://img.shields.io/badge/AI-OpenRouter-purple)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
 ## What It Does
 
-User enters a URL → ScanAI runs a 7-step security pipeline → Gemini AI generates a plain-English report with vulnerabilities, severity ratings, and step-by-step fixes.
+User enters a URL → ScanAI runs a 7-step security pipeline → OpenRouter generates a plain-English report with vulnerabilities, severity ratings, and step-by-step fixes.
 
 ## Architecture
 
@@ -35,7 +35,7 @@ Worker Container runs pipeline:
   │  4. katana    → crawl endpoints         │
   │  5. nuclei    → vuln scan (JSON output) │
   │  6. testssl   → TLS/SSL issues (JSON)   │
-  │  7. Gemini AI → structured report       │
+  │  7. OpenRouter → structured report       │
   └─────────────────────────────────────────┘
       │
       ▼
@@ -52,7 +52,7 @@ Poll /api/scans/{id} → Frontend shows results
 | **Queue** | Celery + Redis |
 | **Database** | PostgreSQL + SQLAlchemy |
 | **Scanners** | subfinder, httpx, naabu, katana, nuclei, testssl.sh |
-| **AI** | Gemini 2.5 Flash (Google AI API) |
+| **AI** | OpenRouter (model configurable) |
 | **Infra** | Docker Compose |
 
 ## Quick Start
@@ -61,7 +61,7 @@ Poll /api/scans/{id} → Frontend shows results
 # 1. Copy environment variables
 cp .env.example .env
 
-# 2. Add your Gemini API key to .env
+# 2. Add your OpenRouter API key to .env
 #    GEMINI_API_KEY=your-key-here
 
 # 3. Build and start all services with Docker (production)
@@ -74,6 +74,9 @@ docker compose up -d
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `GEMINI_API_KEY` | **Required.** Your Google Gemini API key | — |
+| `OPENROUTER_MODEL` | Model to use on OpenRouter | `openrouter/free` |
+| `OPENROUTER_MODEL_FALLBACKS` | Comma-separated fallback models | — |
+| `OPENROUTER_BASE_URL` | OpenRouter base URL | `https://openrouter.ai/api/v1` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://scanai:scanai@db:5432/scanai` |
 | `REDIS_URL` | Redis connection string | `redis://redis:6379/0` |
 | `SECRET_KEY` | Application secret key | `change-me-in-production` |

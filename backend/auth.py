@@ -3,13 +3,14 @@ ScanAI — Authentication module.
 Password hashing, JWT creation/verification, and FastAPI dependencies.
 """
 
+import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import bcrypt
 from fastapi import Depends, HTTPException, Request, status
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -17,9 +18,6 @@ from database import get_db
 from models import User, UserRole
 
 logger = logging.getLogger(__name__)
-
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT settings
 ALGORITHM = settings.JWT_ALGORITHM
@@ -33,14 +31,27 @@ COOKIE_MAX_AGE = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # seconds
 
 # ── Password Hashing ──────────────────────────────────────────────
 
+_BCRYPT_MAX_BYTES = 72
+
+
+def _prepare_password(password: str) -> bytes:
+    """Encode password; pre-hash with SHA-256 if >72 bytes to fit bcrypt limit."""
+    pw_bytes = password.encode("utf-8")
+    if len(pw_bytes) > _BCRYPT_MAX_BYTES:
+        pw_bytes = hashlib.sha256(pw_bytes).digest()
+    return pw_bytes
+
+
 def hash_password(password: str) -> str:
     """Hash a plaintext password using bcrypt."""
-    return pwd_context.hash(password)
+    pw_bytes = _prepare_password(password)
+    return bcrypt.hashpw(pw_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plaintext password against a hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    pw_bytes = _prepare_password(plain_password)
+    return bcrypt.checkpw(pw_bytes, hashed_password.encode("utf-8"))
 
 
 # ── JWT Token ─────────────────────────────────────────────────────
