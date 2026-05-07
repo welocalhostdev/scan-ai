@@ -633,8 +633,30 @@ def _finding_card_height(c: Canvas, finding: dict, width: float) -> float:
     body = _wrap(str(finding.get("body") or ""), FONT_SANS, 8.5, width - pad * 2, 4)
     steps = finding.get("steps") if isinstance(finding.get("steps"), list) else []
     steps = [str(s).strip() for s in steps if str(s).strip()][:3]
-    # Estimated but stable; no text bleeds because each block has max lines.
-    return 34 + len(title) * 14 + len(body) * 11 + 58 + max(1, len(steps)) * 18 + 46
+    # Match the actual drawing layout conservatively so cards paginate before
+    # they can spill below the page bottom.
+    pill_block = 28
+    title_block = len(title) * 14
+    title_gap = 8
+    body_block = len(body) * 11
+    body_gap = 18
+    meta_pill_row = 18
+    evidence_block = 48
+    evidence_gap = 14
+    steps_block = max(1, len(steps)) * 18
+    bottom_padding = 24
+    return (
+        pill_block
+        + title_block
+        + title_gap
+        + body_block
+        + body_gap
+        + meta_pill_row
+        + evidence_block
+        + evidence_gap
+        + steps_block
+        + bottom_padding
+    )
 
 
 def _draw_finding_card(c: Canvas, x: float, y: float, w: float, h: float, finding: dict) -> None:
@@ -779,4 +801,3 @@ def generate_security_memo(scan_data: dict, output_path: str) -> None:
     c.showPage()
     _findings_pages(c, scan_data, start_page_no=4)
     c.save()
-

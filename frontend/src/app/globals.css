@@ -307,8 +307,8 @@
   }
 
   .print-finding {
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: auto;
+    page-break-inside: auto;
     border-top: 1px solid rgba(20, 20, 19, 0.14);
     padding-top: 14px;
     margin-top: 14px;
@@ -319,6 +319,16 @@
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 8px;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-finding > p,
+  .print-finding > div,
+  .print-finding ol,
+  .print-finding li {
+    break-inside: auto;
+    page-break-inside: auto;
   }
 
   .print-finding-head span {
