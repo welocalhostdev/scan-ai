@@ -8,6 +8,7 @@ import logging
 import re
 from collections import Counter
 from typing import Any
+from urllib.parse import urlparse
 
 import google.generativeai as genai
 
@@ -55,6 +56,7 @@ REPORT_SCHEMA: dict[str, Any] = {
                     "evidence",
                     "what_it_means",
                     "how_to_fix",
+                    "fix_prompt",
                     "affected",
                 ],
                 "properties": {
@@ -99,6 +101,10 @@ REPORT_SCHEMA: dict[str, Any] = {
                         "items": {"type": "string"},
                         "minItems": 2,
                         "maxItems": 4,
+                    },
+                    "fix_prompt": {
+                        "type": "string",
+                        "description": "Ready-to-copy prompt for a local coding agent to fix this exact finding in the user's codebase",
                     },
                     "affected": {
                         "type": "string",
@@ -167,9 +173,13 @@ Output guidance:
 - evidence: one short factual line from the scan results
 - what_it_means: explain the real-world risk in plain English, not scanner jargon
 - how_to_fix: 2-4 concrete steps that a small engineering or IT team can follow
+- fix_prompt: a self-contained prompt the user can paste into a local coding agent. Include the issue, affected asset, evidence, expected remediation, tests to add, and a request to preserve existing behavior. Do not claim the codebase is known.
 - affected: a specific public URL, host, route, or host:port when available
 
 Safety and quality rules:
+- Do not say the target is "100% secure", "fully secure", "unhackable", or "safe from attackers".
+- If no strong findings are present, say no priority evidence was retained within the unauthenticated automated scan scope.
+- Distinguish confirmed evidence from recommended manual validation, especially for authentication, authorization, multi-tenant isolation, and business logic.
 - Never mention internal file paths, local paths, private IPs, or implementation trivia unless absolutely required to explain exposure.
 - Never output markdown, code fences, prose outside the JSON object, or placeholder text.
 - If the target looks broadly healthy, return a low risk_score and an empty or very short findings list rather than padding the report."""
@@ -198,11 +208,17 @@ def _normalize_asset(value: Any) -> str:
 def _compact_scan_results(scan_results: dict[str, Any]) -> dict[str, Any]:
     """Build a smaller, higher-signal evidence packet for the model."""
     subdomains = scan_results.get("subdomains", []) or []
+    dns_records = scan_results.get("dns_records", []) or []
     live_hosts = scan_results.get("live_hosts", []) or []
     open_ports = scan_results.get("open_ports", []) or []
     crawled_endpoints = scan_results.get("crawled_endpoints", []) or []
+    api_discovered_routes = scan_results.get("api_discovered_routes", []) or []
+    api_parameters = scan_results.get("api_parameters", []) or []
+    api_schemas = scan_results.get("api_schemas", []) or []
     vulnerabilities = scan_results.get("vulnerabilities", []) or []
+    api_vulnerabilities = scan_results.get("api_vulnerabilities", []) or []
     tls_analysis = scan_results.get("tls_analysis", []) or []
+    tls_inventory = scan_results.get("tls_inventory", []) or []
     xss_findings = scan_results.get("xss_findings", []) or []
 
     host_ports: dict[str, list[int]] = {}
@@ -215,11 +231,21 @@ def _compact_scan_results(scan_results: dict[str, Any]) -> dict[str, Any]:
             host_ports.setdefault(host, []).append(port)
 
     compact_vulns = []
-    for item in vulnerabilities[:40]:
+    seen_vuln_keys: set[tuple[str, str]] = set()
+    for item in vulnerabilities + api_vulnerabilities:
         if not isinstance(item, dict):
             compact_vulns.append(_truncate_text(str(item), 240))
+            if len(compact_vulns) >= 60:
+                break
             continue
         info = item.get("info", {}) if isinstance(item.get("info"), dict) else {}
+        key = (
+            str(item.get("template-id") or info.get("name") or "unknown"),
+            str(item.get("matched-at") or item.get("host") or item.get("url") or "unknown"),
+        )
+        if key in seen_vuln_keys:
+            continue
+        seen_vuln_keys.add(key)
         compact_vulns.append(
             {
                 "title": info.get("name") or item.get("template-id") or "Unnamed finding",
@@ -230,6 +256,8 @@ def _compact_scan_results(scan_results: dict[str, Any]) -> dict[str, Any]:
                 "description": _truncate_text(str(info.get("description") or ""), 220),
             }
         )
+        if len(compact_vulns) >= 60:
+            break
 
     compact_tls = []
     tls_items = tls_analysis if isinstance(tls_analysis, list) else [tls_analysis]
@@ -264,6 +292,21 @@ def _compact_scan_results(scan_results: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
+    dns_samples = []
+    for item in dns_records[:30]:
+        if not isinstance(item, dict):
+            dns_samples.append(_truncate_text(str(item), 180))
+            continue
+        dns_samples.append(
+            {
+                "host": item.get("host") or item.get("input"),
+                "a": item.get("a") or item.get("A"),
+                "aaaa": item.get("aaaa") or item.get("AAAA"),
+                "cname": item.get("cname") or item.get("CNAME"),
+                "mx": item.get("mx") or item.get("MX"),
+            }
+        )
+
     crawl_samples = []
     for item in crawled_endpoints[:40]:
         if isinstance(item, dict):
@@ -275,6 +318,70 @@ def _compact_scan_results(scan_results: dict[str, Any]) -> dict[str, Any]:
             )
         else:
             crawl_samples.append(_truncate_text(str(item), 180))
+
+    route_samples = []
+    for item in api_discovered_routes[:30]:
+        if not isinstance(item, dict):
+            route_samples.append(_truncate_text(str(item), 180))
+            continue
+        route_samples.append(
+            {
+                "url": item.get("url"),
+                "path": item.get("path"),
+                "status": item.get("status"),
+                "source": item.get("source") or "ffuf",
+            }
+        )
+
+    parameter_samples = []
+    for item in api_parameters[:20]:
+        if not isinstance(item, dict):
+            parameter_samples.append(_truncate_text(str(item), 180))
+            continue
+        params = item.get("parameters") if isinstance(item.get("parameters"), list) else []
+        parameter_samples.append(
+            {
+                "url": item.get("url"),
+                "parameters": [str(param) for param in params[:20]],
+                "source": item.get("source") or "arjun",
+            }
+        )
+
+    schema_samples = []
+    for item in api_schemas[:4]:
+        if not isinstance(item, dict):
+            schema_samples.append(_truncate_text(str(item), 220))
+            continue
+        schema_samples.append(
+            {
+                "url": item.get("url"),
+                "title": item.get("title"),
+                "version": item.get("version"),
+                "schema_version": item.get("schema_version"),
+                "path_count": item.get("path_count"),
+                "operation_count": item.get("operation_count"),
+                "methods": item.get("methods", [])[:10] if isinstance(item.get("methods"), list) else [],
+                "auth_schemes": item.get("auth_schemes", [])[:10] if isinstance(item.get("auth_schemes"), list) else [],
+                "sample_operations": item.get("sample_operations", [])[:12] if isinstance(item.get("sample_operations"), list) else [],
+            }
+        )
+
+    tls_inventory_samples = []
+    for item in tls_inventory[:30]:
+        if not isinstance(item, dict):
+            tls_inventory_samples.append(_truncate_text(str(item), 180))
+            continue
+        tls_inventory_samples.append(
+            {
+                "host": item.get("host") or item.get("ip"),
+                "tls_version": item.get("tls_version") or item.get("version"),
+                "cipher": item.get("cipher"),
+                "cn": item.get("cn") or item.get("common_name"),
+                "issuer": item.get("issuer_cn") or item.get("issuer"),
+                "expired": item.get("expired"),
+                "self_signed": item.get("self_signed"),
+            }
+        )
 
     compact_xss = []
     for item in xss_findings[:30]:
@@ -293,22 +400,33 @@ def _compact_scan_results(scan_results: dict[str, Any]) -> dict[str, Any]:
     return {
         "overview": {
             "subdomains_found": len(subdomains),
+            "dns_records_found": len(dns_records),
             "live_hosts_found": len(live_hosts),
             "open_ports_found": len(open_ports),
             "crawled_endpoints_found": len(crawled_endpoints),
+            "api_routes_discovered": len(api_discovered_routes),
+            "api_parameterized_endpoints": len(api_parameters),
+            "api_schemas_found": len(api_schemas),
             "scanner_findings_found": len(vulnerabilities),
+            "api_signals_found": len(api_vulnerabilities),
             "tls_signals_found": len(tls_items),
+            "tls_inventory_found": len(tls_inventory),
             "xss_signals_found": len(xss_findings),
         },
         "subdomain_samples": [_normalize_asset(item.get("host") if isinstance(item, dict) else item) for item in subdomains[:20]],
+        "dns_samples": dns_samples,
         "live_host_samples": live_host_samples,
         "open_port_map": [
             {"host": host, "ports": sorted(set(ports))[:12]}
             for host, ports in list(host_ports.items())[:12]
         ],
         "crawled_endpoint_samples": crawl_samples,
+        "api_route_samples": route_samples,
+        "api_parameter_samples": parameter_samples,
+        "api_schema_samples": schema_samples,
         "vulnerability_samples": compact_vulns,
         "tls_samples": compact_tls,
+        "tls_inventory_samples": tls_inventory_samples,
         "xss_samples": compact_xss,
     }
 
@@ -319,6 +437,10 @@ def _derive_visuals(scan_results: dict[str, Any], report: dict[str, Any]) -> dic
     severity_counts = Counter(str(item.get("severity", "info")).lower() for item in findings)
     category_counts = Counter(str(item.get("category", "other")).lower() for item in findings)
     affected_counts = Counter()
+    api_paths: list[dict[str, str]] = []
+    api_docs: list[dict[str, str]] = []
+    parameterized_routes: list[dict[str, Any]] = []
+    schema_routes: list[dict[str, Any]] = []
 
     for item in findings:
         affected = str(item.get("affected") or "").strip()
@@ -327,16 +449,115 @@ def _derive_visuals(scan_results: dict[str, Any], report: dict[str, Any]) -> dic
 
     attack_surface = {
         "subdomains": len(scan_results.get("subdomains", []) or []),
+        "dns_records": len(scan_results.get("dns_records", []) or []),
         "live_hosts": len(scan_results.get("live_hosts", []) or []),
         "open_ports": len(scan_results.get("open_ports", []) or []),
         "crawled_endpoints": len(scan_results.get("crawled_endpoints", []) or []),
+        "api_routes": len(scan_results.get("api_discovered_routes", []) or []),
+        "parameterized_endpoints": len(scan_results.get("api_parameters", []) or []),
+        "api_schemas": len(scan_results.get("api_schemas", []) or []),
         "scanner_findings": len(scan_results.get("vulnerabilities", []) or []),
+        "api_signals": len(scan_results.get("api_vulnerabilities", []) or []),
         "tls_signals": len(scan_results.get("tls_analysis", []) or []),
+        "tls_inventory": len(scan_results.get("tls_inventory", []) or []),
         "xss_signals": len(scan_results.get("xss_findings", []) or []),
     }
 
+    api_markers = (
+        "/api",
+        "/graphql",
+        "/gql",
+        "/rest",
+        "/v1",
+        "/v2",
+        "/v3",
+        "swagger",
+        "openapi",
+        "api-docs",
+        "redoc",
+    )
+    doc_markers = ("swagger", "openapi", "api-docs", "redoc", "graphql")
+    seen_paths: set[str] = set()
+    api_source_items: list[dict[str, Any]] = []
+    api_source_items.extend([item for item in scan_results.get("crawled_endpoints", []) or [] if isinstance(item, dict)])
+    api_source_items.extend([item for item in scan_results.get("api_discovered_routes", []) or [] if isinstance(item, dict)])
+
+    for item in api_source_items:
+        if not isinstance(item, dict):
+            continue
+        raw_url = (
+            item.get("request", {}).get("endpoint")
+            or item.get("url")
+            or item.get("endpoint")
+            or item.get("path")
+        )
+        if not raw_url:
+            continue
+        parsed = urlparse(str(raw_url))
+        path = parsed.path or str(raw_url)
+        if not path or path in seen_paths:
+            continue
+        lowered = path.lower()
+        if not any(marker in lowered for marker in api_markers):
+            continue
+        seen_paths.add(path)
+        entry = {"path": path, "url": str(raw_url)}
+        if any(marker in lowered for marker in doc_markers):
+            api_docs.append(entry)
+        else:
+            api_paths.append(entry)
+
+    for item in scan_results.get("api_parameters", []) or []:
+        if not isinstance(item, dict):
+            continue
+        params = item.get("parameters") if isinstance(item.get("parameters"), list) else []
+        if not params:
+            continue
+        parameterized_routes.append(
+            {
+                "url": str(item.get("url") or ""),
+                "parameters": [str(param) for param in params[:20]],
+                "parameter_count": len(params),
+            }
+        )
+
+    for schema in scan_results.get("api_schemas", []) or []:
+        if not isinstance(schema, dict):
+            continue
+        schema_routes.append(
+            {
+                "url": str(schema.get("url") or ""),
+                "title": str(schema.get("title") or "Untitled API"),
+                "version": schema.get("version"),
+                "schema_version": schema.get("schema_version"),
+                "path_count": int(schema.get("path_count") or 0),
+                "operation_count": int(schema.get("operation_count") or 0),
+                "methods": schema.get("methods", [])[:10] if isinstance(schema.get("methods"), list) else [],
+                "auth_schemes": schema.get("auth_schemes", [])[:10] if isinstance(schema.get("auth_schemes"), list) else [],
+                "sample_operations": schema.get("sample_operations", [])[:12] if isinstance(schema.get("sample_operations"), list) else [],
+            }
+        )
+
     return {
         "attack_surface": attack_surface,
+        "api_surface": {
+            "candidate_routes": api_paths[:12],
+            "documentation_endpoints": api_docs[:8],
+            "parameterized_routes": parameterized_routes[:8],
+            "schemas": schema_routes[:4],
+            "candidate_route_count": len(api_paths),
+            "documentation_endpoint_count": len(api_docs),
+            "parameterized_route_count": len(parameterized_routes),
+            "schema_count": len(schema_routes),
+        },
+        "assurance": {
+            "mode": "unauthenticated_external_scan",
+            "coverage_notes": [
+                "Tests are limited to externally reachable assets and responses available without customer credentials.",
+                "Authorization, tenant isolation, and business-logic abuse require authenticated API schemas, tokens, and approved test accounts.",
+                "Findings are retained only when scanner evidence is strong enough to support remediation.",
+            ],
+        },
         "severity_breakdown": {
             level: int(severity_counts.get(level, 0))
             for level in ("critical", "high", "medium", "low", "info")
@@ -374,6 +595,40 @@ def _strip_json_fences(text: str) -> str:
     if match:
         return match.group(1).strip()
     return text
+
+
+def _build_fix_prompt(finding: dict[str, Any]) -> str:
+    """Create a safe remediation prompt when the model omitted one."""
+    title = str(finding.get("title") or "Security finding").strip()
+    severity = str(finding.get("severity") or "unknown").strip()
+    category = str(finding.get("category") or "other").strip()
+    affected = str(finding.get("affected") or "Unknown").strip()
+    evidence = str(finding.get("evidence") or "No concise evidence provided.").strip()
+    meaning = str(finding.get("what_it_means") or "").strip()
+    steps = finding.get("how_to_fix") or []
+    if isinstance(steps, list):
+        remediation = "\n".join(f"- {str(step).strip()}" for step in steps if str(step).strip())
+    else:
+        remediation = f"- {str(steps).strip()}"
+
+    return (
+        "You are working in my local codebase as a senior application security engineer. "
+        "Please inspect the implementation that serves the affected asset, fix the security issue, "
+        "and add focused regression tests without changing unrelated behavior.\n\n"
+        f"Finding: {title}\n"
+        f"Severity: {severity}\n"
+        f"Category: {category}\n"
+        f"Affected asset: {affected}\n"
+        f"Evidence from scanner: {evidence}\n"
+        f"Risk explanation: {meaning or 'Review the scanner evidence and verify impact in the codebase.'}\n\n"
+        "Expected remediation:\n"
+        f"{remediation or '- Implement the safest fix that removes the vulnerable behavior.'}\n\n"
+        "Acceptance criteria:\n"
+        "- Identify the exact route, handler, middleware, config, or dependency responsible.\n"
+        "- Implement the smallest durable fix.\n"
+        "- Add or update tests that would have failed before the fix.\n"
+        "- Run the relevant lint/test/build commands and summarize the changed files."
+    )
 
 
 def _validate_report(report: dict[str, Any]) -> dict[str, Any]:
@@ -424,8 +679,12 @@ def _validate_report(report: dict[str, Any]) -> dict[str, Any]:
             finding["what_it_means"] = "No description available."
         if "how_to_fix" not in finding:
             finding["how_to_fix"] = ["Review this finding with your IT team."]
+        if not isinstance(finding.get("how_to_fix"), list):
+            finding["how_to_fix"] = [str(finding.get("how_to_fix"))]
         if "affected" not in finding:
             finding["affected"] = "Unknown"
+        if "fix_prompt" not in finding or not str(finding["fix_prompt"]).strip():
+            finding["fix_prompt"] = _build_fix_prompt(finding)
 
     if not report["priority_actions"]:
         fallback_actions = []

@@ -1,6 +1,6 @@
 # ──────────────────────────────────────────────────────────────────
 # ScanAI — Docker Compose
-# 5 services: PostgreSQL, Redis, FastAPI API, Celery Worker, Next.js Frontend
+# PostgreSQL, Redis, FastAPI API, Celery Worker, Web app, Admin app, MinIO
 # ──────────────────────────────────────────────────────────────────
 
 services:
@@ -47,7 +47,7 @@ services:
     environment:
       DATABASE_URL: postgresql://scanai:scanai@db:5432/scanai
       REDIS_URL: redis://redis:6379/0
-      ALLOWED_ORIGINS: https://scanai.welocalhost.com
+      ALLOWED_ORIGINS: https://scanai.welocalhost.com,https://admin.scanai.welocalhost.com
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: scanai
       MINIO_SECRET_KEY: scanai-secret-key
@@ -91,18 +91,36 @@ services:
       - NET_RAW
       - NET_ADMIN
 
-  # ── Frontend ──
+  # ── Web App ──
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_ADMIN_APP_URL: ${NEXT_PUBLIC_ADMIN_APP_URL:-https://admin.scanai.welocalhost.com}
     restart: unless-stopped
     expose:
       - "3000"
     environment:
       INTERNAL_API_URL: http://api:8000
+    depends_on:
+      - api
+
+  # ── Admin App ──
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_WEB_APP_URL: ${NEXT_PUBLIC_WEB_APP_URL:-https://scanai.welocalhost.com}
+    restart: unless-stopped
+    expose:
+      - "3001"
+    environment:
+      INTERNAL_API_URL: http://api:8000
+      NEXT_PUBLIC_WEB_APP_URL: ${NEXT_PUBLIC_WEB_APP_URL:-https://scanai.welocalhost.com}
     depends_on:
       - api
 

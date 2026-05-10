@@ -36,9 +36,15 @@ ENV GOPATH="/root/go"
 
 # Install ProjectDiscovery tools
 RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest && \
+    go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest && \
     go install github.com/projectdiscovery/httpx/cmd/httpx@latest && \
     go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest && \
-    go install github.com/projectdiscovery/katana/cmd/katana@latest
+    go install github.com/projectdiscovery/tlsx/cmd/tlsx@latest && \
+    go install github.com/projectdiscovery/katana/cmd/katana@latest && \
+    go install github.com/ffuf/ffuf/v2@latest
+
+# Install API parameter discovery tooling
+RUN pip install --no-cache-dir arjun==2.2.7
 
 # Install Dalfox (active XSS scanner)
 RUN go install github.com/hahwul/dalfox/v2@latest

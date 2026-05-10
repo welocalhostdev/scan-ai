@@ -18,7 +18,7 @@ User enters a URL → ScanAI runs a 7-step security pipeline → OpenRouter gene
 User enters URL
       │
       ▼
-Next.js Frontend ─── POST /api/scans
+Next.js Web App ─── POST /api/scans
       │
       ▼
 FastAPI Backend ──── validates URL (blocks RFC1918, localhost)
@@ -40,14 +40,15 @@ Worker Container runs pipeline:
       │
       ▼
 Store report → PostgreSQL
-Poll /api/scans/{id} → Frontend shows results
+Poll /api/scans/{id} → Web app shows results
 ```
 
 ## Tech Stack
 
 | Layer | Tech |
 |-------|------|
-| **Frontend** | Next.js 14, Tailwind CSS v4, shadcn/ui |
+| **Web app** | Next.js 16, Tailwind CSS v4, shadcn/ui |
+| **Admin app** | Separate Next.js 16 app in `apps/admin`, sharing the same cookie auth |
 | **Backend** | Python FastAPI |
 | **Queue** | Celery + Redis |
 | **Database** | PostgreSQL + SQLAlchemy |
@@ -137,12 +138,18 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-### Frontend only
+### Web app only
 
 ```bash
-cd frontend
 npm install
-npm run dev
+npm run dev -- --filter=@scanai/web
+```
+
+### Admin app only
+
+```bash
+npm install
+npm run dev -- --filter=@scanai/admin
 ```
 
 ### Test with curl

@@ -4,8 +4,11 @@ REST endpoints for auth, scans, and admin management.
 """
 
 import logging
+import re
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, List, Optional
+from urllib.parse import urlparse
 from uuid import UUID
 
 import redis
@@ -110,6 +113,12 @@ class ScanCreateResponse(BaseModel):
     scan_id: str
 
 
+class ScanCancelResponse(BaseModel):
+    scan_id: str
+    status: str
+    message: str
+
+
 class ScanStatusResponse(BaseModel):
     id: str
     url: str
@@ -121,6 +130,48 @@ class ScanStatusResponse(BaseModel):
     pdf_url: str | None = None
     created_at: str
     user_id: str | None = None
+
+
+class DashboardRecentScan(BaseModel):
+    id: str
+    url: str
+    status: str
+    progress_step: int
+    risk_score: int | None = None
+    findings_count: int
+    pdf_url: str | None = None
+    created_at: str
+
+
+class DashboardCategoryCount(BaseModel):
+    label: str
+    count: int
+
+
+class DashboardAssetCount(BaseModel):
+    asset: str
+    count: int
+
+
+class DashboardDayCount(BaseModel):
+    date: str
+    scans: int
+    findings: int
+
+
+class ScanDashboardResponse(BaseModel):
+    total_scans: int
+    complete_scans: int
+    active_scans: int
+    failed_scans: int
+    reports_ready: int
+    total_findings: int
+    average_risk_score: int | None = None
+    severity_counts: dict[str, int]
+    category_counts: list[DashboardCategoryCount]
+    top_assets: list[DashboardAssetCount]
+    scans_by_day: list[DashboardDayCount]
+    recent_scans: list[DashboardRecentScan]
 
 
 # Admin models
@@ -200,6 +251,16 @@ def _decrement_rate_limit(client_ip: str) -> None:
             redis_client.decr(key)
     except redis.ConnectionError:
         pass
+
+
+def _coerce_risk_score(value: Any) -> int | None:
+    """Convert stored report risk_score values into a bounded integer."""
+    try:
+        if value is None or isinstance(value, bool):
+            return None
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return None
 
 
 def _set_auth_cookie(response: Response, token: str) -> None:
@@ -287,6 +348,16 @@ def _generate_pdf_for_scan(scan: Scan, db: Session, *, route_prefix: str) -> dic
     }
 
 
+def _scan_pdf_filename(scan: Scan) -> str:
+    """Return a browser-friendly PDF filename for the scan."""
+    parsed = urlparse(scan.url)
+    raw_target = parsed.netloc or parsed.path or str(scan.id)[:8]
+    target = re.sub(r"[^a-zA-Z0-9.-]+", "-", raw_target).strip("-").lower()
+    if not target:
+        target = str(scan.id)[:8]
+    return f"scanai-security-report-{target}.pdf"
+
+
 def _stream_scan_pdf(scan: Scan, *, download: bool) -> Response:
     """Stream a stored PDF through the app."""
     if not scan.pdf_url:
@@ -298,7 +369,7 @@ def _stream_scan_pdf(scan: Scan, *, download: bool) -> Response:
     if not pdf_bytes:
         raise HTTPException(status_code=404, detail="Stored PDF could not be retrieved.")
 
-    filename = f"scanai-report-{str(scan.id)[:8]}.pdf"
+    filename = _scan_pdf_filename(scan)
     disposition = "attachment" if download else "inline"
     headers = {
         "Content-Disposition": f'{disposition}; filename="{filename}"',
@@ -469,11 +540,151 @@ async def create_scan(
 
     # Enqueue Celery task
     from tasks import run_scan
-    run_scan.delay(scan_id, validated_url)
+    run_scan.apply_async(args=[scan_id, validated_url], task_id=scan_id)
 
     logger.info(f"Scan created: id={scan_id}, url={validated_url}, user={current_user.email}")
 
     return ScanCreateResponse(scan_id=scan_id)
+
+
+@app.post("/api/scans/{scan_id}/cancel", response_model=ScanCancelResponse)
+async def cancel_scan(
+    scan_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cancel a pending or running scan owned by the current user."""
+    try:
+        scan_uuid = UUID(scan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid scan ID format.")
+
+    scan = db.query(Scan).filter(Scan.id == scan_uuid).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found.")
+
+    if current_user.role != UserRole.ADMIN and scan.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Scan not found.")
+
+    if scan.status not in (ScanStatus.PENDING, ScanStatus.RUNNING):
+        raise HTTPException(status_code=409, detail="Only pending or running scans can be stopped.")
+
+    from tasks import celery_app
+    celery_app.control.revoke(scan_id, terminate=True, signal="SIGTERM")
+
+    scan.status = ScanStatus.FAILED
+    scan.error = "Scan stopped by user."
+    if scan.sub_tasks:
+        next_sub_tasks = dict(scan.sub_tasks)
+        for key, value in next_sub_tasks.items():
+            if value in ("pending", "running"):
+                next_sub_tasks[key] = "failed"
+        scan.sub_tasks = next_sub_tasks
+    scan.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    if scan.client_ip:
+        _decrement_rate_limit(scan.client_ip)
+
+    logger.info(f"Scan cancelled: id={scan_id}, user={current_user.email}")
+    return ScanCancelResponse(scan_id=scan_id, status="failed", message="Scan stopped.")
+
+
+@app.get("/api/scans/dashboard", response_model=ScanDashboardResponse)
+async def get_scan_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return real dashboard aggregates from the current user's scans."""
+    scans = (
+        db.query(Scan)
+        .filter(Scan.user_id == current_user.id)
+        .order_by(Scan.created_at.desc())
+        .all()
+    )
+
+    severity_counts = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+    }
+    category_counts: dict[str, int] = {}
+    asset_counts: dict[str, int] = {}
+    day_counts: dict[str, dict[str, int]] = {}
+    risk_scores: list[int] = []
+
+    for scan in scans:
+        day_key = scan.created_at.date().isoformat()
+        day_counts.setdefault(day_key, {"scans": 0, "findings": 0})
+        day_counts[day_key]["scans"] += 1
+
+        report = scan.report if isinstance(scan.report, dict) else {}
+        risk_score = _coerce_risk_score(report.get("risk_score"))
+        if risk_score is not None:
+            risk_scores.append(risk_score)
+
+        findings = report.get("findings") if isinstance(report.get("findings"), list) else []
+        day_counts[day_key]["findings"] += len(findings)
+
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+
+            severity = str(finding.get("severity") or "info").lower()
+            if severity not in severity_counts:
+                severity = "info"
+            severity_counts[severity] += 1
+
+            category = str(finding.get("category") or "Uncategorized").strip() or "Uncategorized"
+            category_counts[category] = category_counts.get(category, 0) + 1
+
+            affected = str(finding.get("affected") or scan.url).strip() or scan.url
+            asset_counts[affected] = asset_counts.get(affected, 0) + 1
+
+    recent_scans = []
+    for scan in scans:
+        report = scan.report if isinstance(scan.report, dict) else {}
+        findings = report.get("findings") if isinstance(report.get("findings"), list) else []
+        risk_score = _coerce_risk_score(report.get("risk_score"))
+
+        recent_scans.append(
+            DashboardRecentScan(
+                id=str(scan.id),
+                url=scan.url,
+                status=scan.status.value,
+                progress_step=scan.progress_step,
+                risk_score=risk_score,
+                findings_count=len(findings),
+                pdf_url=(f"/api/scans/{scan.id}/pdf" if scan.pdf_url else None),
+                created_at=scan.created_at.isoformat(),
+            )
+        )
+
+    return ScanDashboardResponse(
+        total_scans=len(scans),
+        complete_scans=sum(1 for scan in scans if scan.status == ScanStatus.COMPLETE),
+        active_scans=sum(1 for scan in scans if scan.status in (ScanStatus.RUNNING, ScanStatus.PENDING)),
+        failed_scans=sum(1 for scan in scans if scan.status == ScanStatus.FAILED),
+        reports_ready=sum(1 for scan in scans if scan.report),
+        total_findings=sum(severity_counts.values()),
+        average_risk_score=round(sum(risk_scores) / len(risk_scores)) if risk_scores else None,
+        severity_counts=severity_counts,
+        category_counts=[
+            DashboardCategoryCount(label=label, count=count)
+            for label, count in sorted(category_counts.items(), key=lambda item: item[1], reverse=True)[:8]
+        ],
+        top_assets=[
+            DashboardAssetCount(asset=asset, count=count)
+            for asset, count in sorted(asset_counts.items(), key=lambda item: item[1], reverse=True)[:8]
+        ],
+        scans_by_day=[
+            DashboardDayCount(date=date, scans=counts["scans"], findings=counts["findings"])
+            for date, counts in sorted(day_counts.items())[-14:]
+        ],
+        recent_scans=recent_scans,
+    )
 
 
 @app.get("/api/scans/{scan_id}", response_model=ScanStatusResponse)

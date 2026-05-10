@@ -17,10 +17,16 @@ from models import Scan, ScanStatus, TokenUsage
 from validators import extract_domain
 from scanner import (
     run_subfinder,
+    run_dnsx,
     run_httpx,
     run_naabu,
+    run_tlsx,
     run_katana,
     run_nuclei,
+    run_nuclei_api_checks,
+    run_ffuf_api_discovery,
+    run_arjun_parameter_discovery,
+    run_openapi_schema_discovery,
     run_testssl,
     run_dalfox,
     cleanup_scan_files,
@@ -72,11 +78,17 @@ def _update_scan_progress(scan_id: str, step: int, status: ScanStatus = ScanStat
             if scan.sub_tasks is None:
                 scan.sub_tasks = {
                     "subfinder": "pending",
+                    "dnsx": "pending",
                     "httpx": "pending",
                     "naabu": "pending",
                     "katana": "pending",
+                    "ffuf_api": "pending",
+                    "openapi": "pending",
                     "nuclei": "pending",
+                    "nuclei_api": "pending",
+                    "arjun": "pending",
                     "testssl": "pending",
+                    "tlsx": "pending",
                     "dalfox": "pending",
                     "ai": "pending"
                 }
@@ -151,6 +163,23 @@ def _set_scan_complete(scan_id: str, report: dict) -> None:
                 )
 
             session.commit()
+            try:
+                from pdf_storage import generate_and_store_pdf
+
+                stored_pdf_ref = generate_and_store_pdf(
+                    scan_id=str(scan.id),
+                    url=scan.url,
+                    report_data=report,
+                )
+                if stored_pdf_ref:
+                    scan.pdf_url = stored_pdf_ref
+                    scan.updated_at = datetime.now(timezone.utc)
+                    session.commit()
+                    logger.info(f"PDF generated automatically for scan {scan_id}")
+                else:
+                    logger.warning(f"PDF auto-generation returned no object reference for scan {scan_id}")
+            except Exception as pdf_error:
+                logger.warning(f"PDF auto-generation failed for scan {scan_id}: {pdf_error}")
             logger.info(f"Scan {scan_id} completed successfully")
 
 
@@ -181,6 +210,22 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
             scan_results["subdomains"] = []
             _update_subtask(scan_id_str, "subfinder", "failed")
 
+        _update_subtask(scan_id_str, "dnsx", "running")
+        try:
+            domains_to_resolve = [domain]
+            for sub in scan_results.get("subdomains", []):
+                if isinstance(sub, dict) and "host" in sub:
+                    domains_to_resolve.append(str(sub["host"]))
+                elif isinstance(sub, str):
+                    domains_to_resolve.append(sub)
+            dns_records = await run_dnsx(scan_id_str, domains_to_resolve)
+            scan_results["dns_records"] = dns_records
+            _update_subtask(scan_id_str, "dnsx", "complete")
+        except Exception as e:
+            logger.warning(f"dnsx failed (non-fatal): {e}")
+            scan_results["dns_records"] = []
+            _update_subtask(scan_id_str, "dnsx", "failed")
+
         # Phase 2 — HTTP probing + Port scanning (parallel execution)
         _update_scan_progress(scan_id_str, 2)
 
@@ -189,10 +234,17 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
             _update_subtask(scan_id_str, "httpx", "running")
             try:
                 # Build list of domains to probe: original + discovered subdomains
-                domains_to_probe = [domain]
-                for sub in scan_results.get("subdomains", []):
-                    if isinstance(sub, dict) and "host" in sub:
-                        domains_to_probe.append(sub["host"])
+                domains_to_probe = []
+                for item in scan_results.get("dns_records", []):
+                    if isinstance(item, dict):
+                        host = item.get("host") or item.get("input")
+                        if host:
+                            domains_to_probe.append(str(host))
+                if not domains_to_probe:
+                    domains_to_probe = [domain]
+                    for sub in scan_results.get("subdomains", []):
+                        if isinstance(sub, dict) and "host" in sub:
+                            domains_to_probe.append(sub["host"])
 
                 live_hosts = await run_httpx(
                     scan_id_str,
@@ -257,6 +309,72 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
                 _update_subtask(scan_id_str, "nuclei", "failed")
                 return "failed"
 
+        async def run_ffuf_api_task():
+            """Hidden API route discovery."""
+            _update_subtask(scan_id_str, "ffuf_api", "running")
+            try:
+                routes = await run_ffuf_api_discovery(url, scan_id_str)
+                scan_results["api_discovered_routes"] = routes
+                _update_subtask(scan_id_str, "ffuf_api", "complete")
+                return "success"
+            except Exception as e:
+                logger.warning(f"ffuf api discovery failed (non-fatal): {e}")
+                scan_results["api_discovered_routes"] = []
+                _update_subtask(scan_id_str, "ffuf_api", "failed")
+                return "failed"
+
+        async def run_nuclei_api_task():
+            """API-focused vulnerability and exposure checks."""
+            _update_subtask(scan_id_str, "nuclei_api", "running")
+            try:
+                api_vulns = await run_nuclei_api_checks(url, scan_id_str)
+                scan_results["api_vulnerabilities"] = api_vulns
+                _update_subtask(scan_id_str, "nuclei_api", "complete")
+                return "success"
+            except Exception as e:
+                logger.warning(f"nuclei api checks failed (non-fatal): {e}")
+                scan_results["api_vulnerabilities"] = []
+                _update_subtask(scan_id_str, "nuclei_api", "failed")
+                return "failed"
+
+        async def run_arjun_task():
+            """API parameter discovery task."""
+            _update_subtask(scan_id_str, "arjun", "running")
+            try:
+                params = await run_arjun_parameter_discovery(
+                    url,
+                    scan_id_str,
+                    crawled_endpoints=scan_results.get("crawled_endpoints", []),
+                    ffuf_routes=scan_results.get("api_discovered_routes", []),
+                )
+                scan_results["api_parameters"] = params
+                _update_subtask(scan_id_str, "arjun", "complete")
+                return "success"
+            except Exception as e:
+                logger.warning(f"arjun parameter discovery failed (non-fatal): {e}")
+                scan_results["api_parameters"] = []
+                _update_subtask(scan_id_str, "arjun", "failed")
+                return "failed"
+
+        async def run_openapi_task():
+            """OpenAPI/Swagger schema discovery task."""
+            _update_subtask(scan_id_str, "openapi", "running")
+            try:
+                schemas = await run_openapi_schema_discovery(
+                    url,
+                    scan_id_str,
+                    crawled_endpoints=scan_results.get("crawled_endpoints", []),
+                    ffuf_routes=scan_results.get("api_discovered_routes", []),
+                )
+                scan_results["api_schemas"] = schemas
+                _update_subtask(scan_id_str, "openapi", "complete")
+                return "success"
+            except Exception as e:
+                logger.warning(f"openapi schema discovery failed (non-fatal): {e}")
+                scan_results["api_schemas"] = []
+                _update_subtask(scan_id_str, "openapi", "failed")
+                return "failed"
+
         async def run_testssl_task():
             """TLS/SSL analysis task."""
             _update_scan_progress(scan_id_str, 6)
@@ -270,6 +388,28 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
                 logger.warning(f"testssl failed (non-fatal): {e}")
                 scan_results["tls_analysis"] = []
                 _update_subtask(scan_id_str, "testssl", "failed")
+                return "failed"
+
+        async def run_tlsx_task():
+            """Broad TLS inventory task."""
+            _update_subtask(scan_id_str, "tlsx", "running")
+            try:
+                targets = []
+                for item in scan_results.get("live_hosts", []):
+                    if isinstance(item, dict):
+                        value = item.get("url") or item.get("host") or item.get("input")
+                        if value:
+                            targets.append(str(value))
+                if not targets:
+                    targets = [url]
+                tls_inventory = await run_tlsx(scan_id_str, targets)
+                scan_results["tls_inventory"] = tls_inventory
+                _update_subtask(scan_id_str, "tlsx", "complete")
+                return "success"
+            except Exception as e:
+                logger.warning(f"tlsx failed (non-fatal): {e}")
+                scan_results["tls_inventory"] = []
+                _update_subtask(scan_id_str, "tlsx", "failed")
                 return "failed"
 
         async def run_dalfox_task():
@@ -293,8 +433,18 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
         # Crawl first (to feed active checks), then run vuln/TLS/XSS in parallel.
         logger.info(f"Scan {scan_id_str}: Starting phase 3a (katana)")
         await run_katana_task()
-        logger.info(f"Scan {scan_id_str}: Starting phase 3b (nuclei + testssl + dalfox)")
-        await asyncio.gather(run_nuclei_task(), run_testssl_task(), run_dalfox_task())
+        logger.info(f"Scan {scan_id_str}: Starting phase 3b (ffuf api discovery)")
+        await run_ffuf_api_task()
+        logger.info(f"Scan {scan_id_str}: Starting phase 3c (nuclei + api checks + schema + testssl + dalfox + arjun)")
+        await asyncio.gather(
+            run_nuclei_task(),
+            run_nuclei_api_task(),
+            run_openapi_task(),
+            run_testssl_task(),
+            run_tlsx_task(),
+            run_dalfox_task(),
+            run_arjun_task(),
+        )
         logger.info(f"Scan {scan_id_str}: Phase 3 complete")
 
         # Step 7 — AI report generation

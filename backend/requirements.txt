@@ -14,3 +14,4 @@ email-validator>=2.0.0
 minio>=7.2.0
 reportlab>=4.0.0
 google-generativeai>=0.8.0
+PyYAML>=6.0.0

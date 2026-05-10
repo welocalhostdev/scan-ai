@@ -23,25 +23,45 @@ MARGIN_TOP = 36
 MARGIN_BOTTOM = 28
 GUTTER = 16
 
-CREAM_BG = HexColor("#F2EDE6")
-CREAM_CARD = HexColor("#FDFAF6")
-CREAM_DARK = HexColor("#1A1612")
-ORANGE = HexColor("#E8521A")
-ORANGE_LIGHT = HexColor("#F5C4A8")
+PAGE_BG = HexColor("#FFFFFF")
+CARD_BG = HexColor("#FFFFFF")
+CARD_MUTED = HexColor("#F6F7F4")
+INK = HexColor("#080909")
+INK_SOFT = HexColor("#151819")
+TEAL = HexColor("#4FA5B6")
+TEAL_DARK = HexColor("#123F4D")
+ORANGE = HexColor("#EF5A2A")
+ORANGE_LIGHT = HexColor("#FFE7DC")
 AMBER = HexColor("#D4860A")
-BLUE_VIZ = HexColor("#3B6FD4")
-TEXT_PRIMARY = HexColor("#1A1612")
-TEXT_SECONDARY = HexColor("#6B5F54")
+BLUE_VIZ = TEAL
+BORDER = HexColor("#D7D8D4")
+GRID = HexColor("#ECEDEA")
+TEXT_PRIMARY = HexColor("#090909")
+TEXT_SECONDARY = HexColor("#666B68")
 WHITE = HexColor("#FFFFFF")
+
+# Backward-compatible aliases used by the older drawing helpers below.
+CREAM_BG = PAGE_BG
+CREAM_CARD = CARD_BG
+CREAM_DARK = INK
 
 FONT_SANS = "Helvetica"
 FONT_SANS_BOLD = "Helvetica-Bold"
-FONT_SERIF_ITALIC = "Times-Italic"
+FONT_SERIF_ITALIC = "Helvetica-Bold"
 FONT_CODE = "Courier"
 
 
 def _alpha(color: Color, a: float) -> Color:
     return Color(color.red, color.green, color.blue, alpha=a)
+
+
+def _mix(a: Color, b: Color, t: float) -> Color:
+    t = max(0.0, min(1.0, t))
+    return Color(
+        a.red + (b.red - a.red) * t,
+        a.green + (b.green - a.green) * t,
+        a.blue + (b.blue - a.blue) * t,
+    )
 
 
 def _safe_int(value: object, default: int = 0) -> int:
@@ -53,8 +73,41 @@ def _safe_int(value: object, default: int = 0) -> int:
 
 def _full_bg(c: Canvas) -> None:
     c.saveState()
-    c.setFillColor(CREAM_BG)
+    c.setFillColor(PAGE_BG)
     c.rect(0, 0, PAGE_W, PAGE_H, stroke=0, fill=1)
+    c.setStrokeColor(_alpha(GRID, 0.72))
+    c.setLineWidth(0.35)
+    for x in range(0, int(PAGE_W) + 1, 39):
+        c.line(x, 0, x, PAGE_H)
+    for y in range(82, int(PAGE_H), 82):
+        c.line(0, y, PAGE_W, y)
+    c.restoreState()
+
+
+def _landing_gradient_bg(c: Canvas) -> None:
+    c.saveState()
+    c.setFillColor(INK)
+    c.rect(0, 0, PAGE_W, PAGE_H, stroke=0, fill=1)
+    bands = 24
+    band_w = PAGE_W / bands
+    for i in range(bands):
+        t = i / max(1, bands - 1)
+        if t < 0.44:
+            col = _mix(TEAL_DARK, INK, t / 0.44)
+        else:
+            col = _mix(INK, ORANGE, (t - 0.44) / 0.56)
+        c.setFillColor(_alpha(col, 0.92))
+        c.rect(i * band_w, 0, band_w + 1, PAGE_H, stroke=0, fill=1)
+    c.setFillColor(_alpha(INK, 0.44))
+    c.rect(0, 0, PAGE_W, PAGE_H, stroke=0, fill=1)
+    c.setStrokeColor(_alpha(WHITE, 0.12))
+    c.setLineWidth(0.45)
+    for x in range(0, int(PAGE_W) + 1, 39):
+        c.line(x, 0, x, PAGE_H)
+    for y in range(86, int(PAGE_H), 86):
+        c.line(0, y, PAGE_W, y)
+    c.setFillColor(_alpha(INK, 0.54))
+    c.rect(0, 0, PAGE_W, 270, stroke=0, fill=1)
     c.restoreState()
 
 
@@ -115,13 +168,12 @@ def _tracked(c: Canvas, x: float, y: float, text: str, font: str, size: float, c
     c.restoreState()
 
 
-def _card(c: Canvas, x: float, y: float, w: float, h: float, dark: bool = False, shadow: bool = True, radius: float = 12) -> None:
+def _card(c: Canvas, x: float, y: float, w: float, h: float, dark: bool = False, shadow: bool = True, radius: float = 4) -> None:
     c.saveState()
-    if shadow and not dark:
-        c.setFillColor(_alpha(HexColor("#C8BFB0"), 0.35))
-        c.roundRect(x + 2, y - 3, w, h, radius, stroke=0, fill=1)
-    c.setFillColor(CREAM_DARK if dark else CREAM_CARD)
-    c.roundRect(x, y, w, h, radius, stroke=0, fill=1)
+    c.setFillColor(INK_SOFT if dark else CARD_BG)
+    c.setStrokeColor(_alpha(WHITE, 0.16) if dark else BORDER)
+    c.setLineWidth(0.65)
+    c.roundRect(x, y, w, h, radius, stroke=1, fill=1)
     c.restoreState()
 
 
@@ -150,19 +202,19 @@ def _pill(c: Canvas, x: float, y: float, label: str, kind: str, *, max_w: float 
     tw = _text_width(text, font, size)
     h = 13
     w = tw + 12
-    rx = h / 2
+    rx = 2
     fill = None
     stroke = _alpha(TEXT_SECONDARY, 0.55)
     color = TEXT_SECONDARY
     lw = 0.5
     if kind == "high":
-        fill, stroke, color, lw = CREAM_DARK, None, WHITE, 0
+        fill, stroke, color, lw = INK, None, WHITE, 0
     elif kind == "medium":
-        fill, stroke, color, lw = AMBER, None, WHITE, 0
+        fill, stroke, color, lw = ORANGE, None, WHITE, 0
     elif kind == "action":
         stroke, color, lw = ORANGE, ORANGE, 0.8
     elif kind == "context":
-        fill, stroke, color, lw = CREAM_CARD, None, TEXT_SECONDARY, 0
+        fill, stroke, color, lw = CARD_MUTED, None, TEXT_SECONDARY, 0
     c.saveState()
     if fill is not None:
         c.setFillColor(fill)
@@ -181,42 +233,53 @@ def _pill(c: Canvas, x: float, y: float, label: str, kind: str, *, max_w: float 
 def _footer(c: Canvas, label: str, page_no: int) -> None:
     y = 18
     c.saveState()
-    c.setStrokeColor(_alpha(TEXT_SECONDARY, 0.25))
+    c.setStrokeColor(_alpha(TEXT_PRIMARY, 0.16))
     c.setLineWidth(0.3)
     c.line(0, y + 10, PAGE_W, y + 10)
     c.setFillColor(TEXT_SECONDARY)
     c.setFont(FONT_SANS, 6.5)
-    c.drawString(MARGIN_X, y, f"SCANAI · {label}".upper())
+    c.drawString(MARGIN_X, y, f"SCANAI | {label}".upper())
     pn = f"{page_no:02d}"
     c.drawString(PAGE_W - MARGIN_X - _text_width(pn, FONT_SANS, 6.5), y, pn)
     c.restoreState()
 
 
 def _topbar(c: Canvas, center_label: str, right_label: str, cover: bool = False) -> None:
-    y = PAGE_H - MARGIN_TOP + 4
     c.saveState()
-    c.setFillColor(ORANGE)
+    c.setFillColor(INK)
+    c.rect(0, PAGE_H - 68, PAGE_W, 68, stroke=0, fill=1)
+    c.setStrokeColor(_alpha(WHITE, 0.16))
+    c.setLineWidth(0.5)
+    c.line(0, PAGE_H - 68, PAGE_W, PAGE_H - 68)
+    c.restoreState()
+    y = PAGE_H - 43
+    c.saveState()
+    c.setFillColor(WHITE)
+    c.rect(MARGIN_X, y - 2, 8, 8, stroke=0, fill=1)
+    c.setStrokeColor(INK)
+    c.setLineWidth(1.3)
+    c.line(MARGIN_X + 2, y - 1, MARGIN_X + 6, y + 7)
+    c.line(MARGIN_X + 5, y - 1, MARGIN_X + 9, y + 7)
     c.setFont(FONT_SANS_BOLD, 10)
-    c.drawString(MARGIN_X, y, "●")
-    c.setFillColor(TEXT_PRIMARY)
-    c.drawString(MARGIN_X + 10, y, "scanai")
+    c.setFillColor(WHITE)
+    c.drawString(MARGIN_X + 12, y, "ScanAI")
     if cover:
-        nav = "Summary · Visuals · Findings"
+        nav = "Summary  Visuals  Findings"
         nw = _text_width(nav, FONT_SANS, 7)
         nx = PAGE_W / 2 - (nw + 16) / 2
-        c.setStrokeColor(_alpha(TEXT_SECONDARY, 0.35))
-        c.setFillColor(_alpha(WHITE, 0.55))
-        c.roundRect(nx, y - 4, nw + 16, 16, 8, stroke=1, fill=1)
-        c.setFillColor(TEXT_SECONDARY)
+        c.setStrokeColor(_alpha(WHITE, 0.16))
+        c.setFillColor(_alpha(WHITE, 0.04))
+        c.roundRect(nx, y - 5, nw + 16, 16, 2, stroke=1, fill=1)
+        c.setFillColor(_alpha(WHITE, 0.76))
         c.setFont(FONT_SANS, 7)
         c.drawString(nx + 8, y + 1, nav)
     else:
-        _tracked(c, PAGE_W / 2 - 70, y, f"● {center_label}", FONT_SANS_BOLD, 8, ORANGE, 1.0)
+        _tracked(c, PAGE_W / 2 - 74, y, center_label, FONT_SANS_BOLD, 7.4, _alpha(WHITE, 0.7), 0.8)
     rw = _text_width(right_label, FONT_SANS, 7)
     rx = PAGE_W - MARGIN_X - rw - 16
-    c.setFillColor(CREAM_CARD)
-    c.roundRect(rx, y - 4, rw + 16, 16, 8, stroke=0, fill=1)
-    c.setFillColor(TEXT_SECONDARY)
+    c.setFillColor(WHITE)
+    c.roundRect(rx, y - 5, rw + 16, 17, 1, stroke=0, fill=1)
+    c.setFillColor(INK)
     c.setFont(FONT_SANS, 7)
     c.drawString(rx + 8, y + 1, right_label)
     c.restoreState()
@@ -227,7 +290,7 @@ def _headline(c: Canvas, x: float, y: float, l1: str, l2: str, size: float = 34)
     c.setFillColor(TEXT_PRIMARY)
     c.setFont(FONT_SANS_BOLD, size)
     c.drawString(x, y, l1)
-    c.setFont(FONT_SERIF_ITALIC, size)
+    c.setFont(FONT_SANS_BOLD, size)
     c.drawString(x, y - (size + 2), l2)
     c.restoreState()
 
@@ -252,8 +315,8 @@ def _headline_wrapped(
     h = 0.0
     l1w = _wrap(l1, FONT_SANS_BOLD, size, max_w, l1_lines)
     h += _draw_lines(c, x, y, l1w, FONT_SANS_BOLD, size, leading, TEXT_PRIMARY)
-    l2w = _wrap(l2, FONT_SERIF_ITALIC, size, max_w, l2_lines)
-    h += _draw_lines(c, x, y - h, l2w, FONT_SERIF_ITALIC, size, leading, TEXT_PRIMARY)
+    l2w = _wrap(l2, FONT_SANS_BOLD, size, max_w, l2_lines)
+    h += _draw_lines(c, x, y - h, l2w, FONT_SANS_BOLD, size, leading, TEXT_PRIMARY)
     return h
 
 
@@ -306,98 +369,77 @@ def _cover(c: Canvas, scan_data: dict) -> None:
     signals = _safe_int(meta.get("signals_reviewed"), 5)
     window = str(meta.get("remediation_window") or "72H")
 
-    _full_bg(c)
-    # Decorative elements intentionally minimal to avoid visual collisions on 390×844.
-    c.saveState()
-    c.setFillColor(_alpha(ORANGE_LIGHT, 0.55))
-    c.circle(PAGE_W + 30, PAGE_H - 160, 160, stroke=0, fill=1)
-    c.restoreState()
+    _landing_gradient_bg(c)
+    _topbar(c, "", f"Report | {domain}", cover=True)
 
-    _topbar(c, "", f"Security Memo · {domain}", cover=True)
-    _tracked(c, MARGIN_X + 10, PAGE_H - MARGIN_TOP - 42, "● Public attack surface memo", FONT_SANS_BOLD, 8, ORANGE, 1.1)
-    # Strict left column layout to guarantee no overlap with right cards.
-    left_col_w = 184
-    headline_top_y = PAGE_H - MARGIN_TOP - 72
-    headline_h = _headline_wrapped(
+    c.saveState()
+    _tracked(c, MARGIN_X, PAGE_H - 112, "Public attack surface report", FONT_SANS_BOLD, 7.5, _alpha(WHITE, 0.72), 0.9)
+    title_y = PAGE_H - 160
+    title_lines = _wrap("Attack surface report.", FONT_SANS_BOLD, 43, PAGE_W - 2 * MARGIN_X, 2)
+    title_h = _draw_lines(c, MARGIN_X, title_y, title_lines, FONT_SANS_BOLD, 43, 45, WHITE)
+    subtitle_lines = _wrap("Evidence that ships.", FONT_SANS_BOLD, 43, PAGE_W - 2 * MARGIN_X, 2)
+    subtitle_h = _draw_lines(c, MARGIN_X, title_y - title_h, subtitle_lines, FONT_SANS_BOLD, 43, 45, WHITE)
+    body_y = title_y - title_h - subtitle_h - 22
+    _draw_lines(
         c,
         MARGIN_X,
-        headline_top_y,
-        left_col_w,
-        "What an attacker",
-        "would notice first.",
-        size=30,
-        l1_lines=2,
-        l2_lines=2,
-    )
-
-    body_top_y = headline_top_y - headline_h - 14
-    body = _wrap(
-        f"A concise owner-facing read for {domain}, focused on externally visible risk and practical remediation.",
+        body_y,
+        _wrap(
+            f"A concise B2B security readout for {domain}: externally visible risk, verified evidence, and owner-ready remediation.",
+            FONT_SANS,
+            10,
+            PAGE_W - 2 * MARGIN_X,
+            4,
+        ),
         FONT_SANS,
-        9,
-        left_col_w,
-        5,
+        10,
+        15,
+        _alpha(WHITE, 0.82),
     )
-    _draw_lines(c, MARGIN_X, body_top_y, body, FONT_SANS, 9, 13, TEXT_SECONDARY)
 
-    # right cards (pulled slightly down to keep separation from headline area)
-    rx, rw = 228, 134
-    y1, h1 = PAGE_H - MARGIN_TOP - 150, 106
-    y2, h2 = y1 - 12 - 92, 92
-    y3, h3 = y2 - 12 - 86, 86
-    _card(c, rx, y1, rw, h1)
-    _tracked(c, rx + 14, y1 + h1 - 22, "Exposure grade", FONT_SANS, 7, TEXT_SECONDARY, 0.8)
-    c.setFont(FONT_SANS_BOLD, 30)
-    c.setFillColor(TEXT_PRIMARY)
-    c.drawString(rx + 14, y1 + h1 - 50, str(grade))
-    c.setFont(FONT_SERIF_ITALIC, 30)
-    c.drawString(rx + 14 + _text_width(str(grade), FONT_SANS_BOLD, 30) + 2, y1 + h1 - 50, "/100")
-    _draw_lines(c, rx + 14, y1 + 20, _wrap(descriptor, FONT_SANS, 8.5, rw - 28, 3), FONT_SANS, 8.5, 12, TEXT_SECONDARY)
+    # Landing-style certificate grid.
+    gx, gy, gw, gh = MARGIN_X + 118, 272, PAGE_W - MARGIN_X * 2 - 118, 176
+    c.setStrokeColor(_alpha(WHITE, 0.15))
+    c.setLineWidth(0.55)
+    for col in range(4):
+        for row in range(3):
+            c.rect(gx + col * (gw / 4), gy + row * (gh / 3), gw / 4, gh / 3, stroke=1, fill=0)
+    grid_items = [("TLS", 0, 2), ("API", 2, 2), ("CVE", 1, 1), ("AUTH", 3, 1), ("CSP", 2, 0)]
+    c.setFont(FONT_SANS_BOLD, 8)
+    for label, col, row in grid_items:
+        tx = gx + col * (gw / 4) + 10
+        ty = gy + row * (gh / 3) + 21
+        c.setFillColor(_alpha(WHITE, 0.72))
+        c.drawString(tx, ty, label)
 
-    _card(c, rx, y2, rw, h2)
-    _tracked(c, rx + 14, y2 + h2 - 22, "Primary threat path", FONT_SANS, 7, TEXT_SECONDARY, 0.8)
-    _draw_lines(c, rx + 14, y2 + h2 - 40, _wrap(path, FONT_SANS, 8.5, rw - 28, 4), FONT_SANS, 8.5, 12, TEXT_SECONDARY)
-
-    _card(c, rx, y3, rw, h3)
-    _tracked(c, rx + 14, y3 + h3 - 22, "Verification", FONT_SANS, 7, TEXT_SECONDARY, 0.8)
-    c.setFont(FONT_SANS_BOLD, 26)
-    c.setFillColor(TEXT_PRIMARY)
-    c.drawString(rx + 14, y3 + h3 - 48, str(verified))
-    c.setFont(FONT_SERIF_ITALIC, 26)
-    c.drawString(rx + 14 + _text_width(str(verified), FONT_SANS_BOLD, 26) + 3, y3 + h3 - 48, "real")
-    _draw_lines(c, rx + 14, y3 + 17, _wrap("issues survived validation and deduping.", FONT_SANS, 8.5, rw - 28, 2), FONT_SANS, 8.5, 12, TEXT_SECONDARY)
-
-    # KPI strip
-    kx, ky, kw, kh = MARGIN_X, MARGIN_BOTTOM + 44, PAGE_W - MARGIN_X * 2, 118
-    _card(c, kx, ky, kw, kh)
-    c.saveState()
-    c.setStrokeColor(_alpha(TEXT_SECONDARY, 0.2))
-    c.setLineWidth(0.6)
-    for i in range(1, 4):
-        xx = kx + i * (kw / 4)
-        c.line(xx, ky + 16, xx, ky + kh - 16)
-    c.restoreState()
-    cells = [
-        (f"{verified:02d}", "VERIFIED\nFINDINGS", TEXT_PRIMARY),
-        (f"{high:02d}", "HIGH-SEVERITY\nITEM", TEXT_PRIMARY),
-        (f"{signals:02d}", "EXPOSURE\nSIGNALS", TEXT_PRIMARY),
-        (window, "REMEDIATION\nWINDOW", ORANGE),
+    # Three sharp readout cards echo the landing page report preview.
+    card_y = 148
+    card_h = 72
+    card_w = (PAGE_W - 2 * MARGIN_X - 18) / 3
+    readouts = [
+        (f"{grade}", "risk score", ORANGE),
+        (f"{verified}", "verified", WHITE),
+        (window, "fix window", TEAL),
     ]
-    col_w = kw / 4
-    for i, (num, lab, col) in enumerate(cells):
-        cell_x = kx + i * col_w
-        cx = cell_x + 14
-        c.setFont(FONT_SANS_BOLD, 28)
-        c.setFillColor(col)
-        c.drawString(cx, ky + kh - 42, num)
-        # Centered, wrapped label to avoid crowding.
-        label_lines = lab.split("\n")
-        base_y = ky + 18
-        for j, line in enumerate(reversed(label_lines)):
-            line = _fit(line.upper(), FONT_SANS_BOLD, 7, col_w - 28)
-            tx = cell_x + col_w / 2 - _text_width(line, FONT_SANS_BOLD, 7) / 2
-            _tracked(c, tx, base_y + j * 9, line, FONT_SANS_BOLD, 7, TEXT_SECONDARY, 0.5)
-    _footer(c, "Security memo · 9:16 concept", 1)
+    for i, (value, label, color) in enumerate(readouts):
+        x = MARGIN_X + i * (card_w + 9)
+        c.setFillColor(_alpha(WHITE, 0.07))
+        c.setStrokeColor(_alpha(WHITE, 0.18))
+        c.setLineWidth(0.7)
+        c.roundRect(x, card_y, card_w, card_h, 2, stroke=1, fill=1)
+        c.setFillColor(color)
+        c.setFont(FONT_SANS_BOLD, 24)
+        c.drawString(x + 12, card_y + 35, _fit(value, FONT_SANS_BOLD, 24, card_w - 24))
+        _tracked(c, x + 12, card_y + 15, label, FONT_SANS_BOLD, 6.2, _alpha(WHITE, 0.58), 0.5)
+
+    detail_y = 82
+    c.setStrokeColor(_alpha(WHITE, 0.18))
+    c.setLineWidth(0.6)
+    c.line(MARGIN_X, detail_y + 34, PAGE_W - MARGIN_X, detail_y + 34)
+    _draw_lines(c, MARGIN_X, detail_y + 20, _wrap(descriptor, FONT_SANS, 8.2, 150, 2), FONT_SANS, 8.2, 11, _alpha(WHITE, 0.7))
+    _draw_lines(c, MARGIN_X + 174, detail_y + 20, _wrap(path, FONT_SANS, 8.2, 160, 2), FONT_SANS, 8.2, 11, _alpha(WHITE, 0.7))
+    c.restoreState()
+    _footer(c, "ScanAI security report", 1)
 
 
 def _summary(c: Canvas, scan_data: dict) -> None:
@@ -414,7 +456,7 @@ def _summary(c: Canvas, scan_data: dict) -> None:
     lens = ex.get("risk_lens", {}) if isinstance(ex.get("risk_lens"), dict) else {}
 
     _full_bg(c)
-    _topbar(c, "01 exposure story", f"Generated · {date}")
+    _topbar(c, "01 exposure story", f"Generated | {date}")
     title_top_y = PAGE_H - MARGIN_TOP - 70
     title_h = _headline_wrapped(
         c,
@@ -428,7 +470,7 @@ def _summary(c: Canvas, scan_data: dict) -> None:
         l2_lines=1,
     )
     summary_top_y = title_top_y - title_h - 14
-    _draw_lines(
+    summary_h = _draw_lines(
         c,
         MARGIN_X,
         summary_top_y,
@@ -438,19 +480,17 @@ def _summary(c: Canvas, scan_data: dict) -> None:
         13,
         TEXT_SECONDARY,
     )
-    # Pill anchored next to summary, never on top of it.
-    _pill(c, PAGE_W - MARGIN_X - 120, summary_top_y - 4, "Owner-facing summary", "context")
+    _pill(c, PAGE_W - MARGIN_X - 120, summary_top_y - summary_h - 10, "Owner-facing summary", "context")
 
     left_w = (PAGE_W - 2 * MARGIN_X - GUTTER) / 2
     right_w = left_w
-    # Cards always start below the summary block with fixed padding.
-    y = summary_top_y - 26 - 388
+    y = summary_top_y - summary_h - 42 - 388
     h = 388
     lx = MARGIN_X
     rx = lx + left_w + GUTTER
     _card(c, lx, y, left_w, h)
     _tracked(c, lx + 14, y + h - 22, "Executive readout", FONT_SANS, 7, TEXT_SECONDARY, 0.8)
-    _draw_lines(c, lx + 14, y + h - 44, _wrap(f"“{quote}”", FONT_SANS_BOLD, 14, left_w - 28, 3), FONT_SANS_BOLD, 14, 16, TEXT_PRIMARY)
+    _draw_lines(c, lx + 14, y + h - 44, _wrap(f'"{quote}"', FONT_SANS_BOLD, 14, left_w - 28, 3), FONT_SANS_BOLD, 14, 16, TEXT_PRIMARY)
     _draw_lines(c, lx + 14, y + h - 112, _wrap(body, FONT_SANS, 8.5, left_w - 28, 4), FONT_SANS, 8.5, 12, TEXT_SECONDARY)
     sy = y + 32
     for i, step in enumerate(steps, 1):
@@ -539,7 +579,7 @@ def _visuals(c: Canvas, scan_data: dict) -> None:
             ("Low", _safe_int(sev.get("low"), 0), ORANGE_LIGHT),
         ],
     )
-    _draw_lines(c, lx + 14, top_y + 14, _wrap("Severity shape shows owner priority at a glance.", FONT_SERIF_ITALIC, 8, left_w - 28, 2), FONT_SERIF_ITALIC, 8, 10, TEXT_SECONDARY)
+    _draw_lines(c, lx + 14, top_y + 14, _wrap("Severity shape shows owner priority at a glance.", FONT_SANS, 8, left_w - 28, 2), FONT_SANS, 8, 10, TEXT_SECONDARY)
 
     mix = v.get("finding_mix", []) if isinstance(v.get("finding_mix"), list) else []
     mix = [m for m in mix if isinstance(m, dict)]
@@ -587,7 +627,7 @@ def _visuals(c: Canvas, scan_data: dict) -> None:
             ("TLS", _safe_int(inv.get("tls"), 0), ORANGE),
         ],
     )
-    _draw_lines(c, lx + 14, by + 16, _wrap("Surface inventory shows breadth versus concentration.", FONT_SERIF_ITALIC, 8, left_w - 28, 2), FONT_SERIF_ITALIC, 8, 10, TEXT_SECONDARY)
+    _draw_lines(c, lx + 14, by + 16, _wrap("Surface inventory shows breadth versus concentration.", FONT_SANS, 8, left_w - 28, 2), FONT_SANS, 8, 10, TEXT_SECONDARY)
 
     dark_h = 136
     note_h = h2 - dark_h - 14
@@ -620,7 +660,7 @@ def _visuals(c: Canvas, scan_data: dict) -> None:
     _card(c, rx, ny, right_w, note_h)
     _tracked(c, rx + 14, ny + note_h - 22, "Owner note", FONT_SANS, 7, TEXT_SECONDARY, 0.8)
     note = str(v.get("owner_note") or "Keep each chart tied to a decision.")
-    _draw_lines(c, rx + 14, ny + note_h - 44, _wrap("“Keep each chart tied to a decision.”", FONT_SANS_BOLD, 12, right_w - 28, 2), FONT_SANS_BOLD, 12, 14, TEXT_PRIMARY)
+    _draw_lines(c, rx + 14, ny + note_h - 44, _wrap('"Keep each chart tied to a decision."', FONT_SANS_BOLD, 12, right_w - 28, 2), FONT_SANS_BOLD, 12, 14, TEXT_PRIMARY)
     # Clamp note lines to available height so it never bleeds below the card.
     available_lines = max(1, int((note_h - 92) / 12))
     _draw_lines(c, rx + 14, ny + note_h - 78, _wrap(note, FONT_SANS, 8.5, right_w - 28, min(available_lines, 4)), FONT_SANS, 8.5, 12, TEXT_SECONDARY)
@@ -682,9 +722,9 @@ def _draw_finding_card(c: Canvas, x: float, y: float, w: float, h: float, findin
     my = by - len(body) * 11 - 10
     mx = x + pad
     for label in (
-        f"Category · {finding.get('category') or 'Other'}",
-        f"Affected · {finding.get('affected') or 'Unknown'}",
-        f"Confidence · {finding.get('confidence') or 'unknown'}",
+        f"Category / {finding.get('category') or 'Other'}",
+        f"Affected / {finding.get('affected') or 'Unknown'}",
+        f"Confidence / {finding.get('confidence') or 'unknown'}",
     ):
         pw = _pill(c, mx, my, label, "context", max_w=(x + w - pad) - mx)
         mx += pw + 5
@@ -693,7 +733,7 @@ def _draw_finding_card(c: Canvas, x: float, y: float, w: float, h: float, findin
 
     ev_y = my - 42
     c.saveState()
-    c.setFillColor(HexColor("#EDE8E0"))
+    c.setFillColor(CARD_MUTED)
     c.roundRect(x + pad, ev_y, w - 2 * pad, 36, 8, stroke=0, fill=1)
     _tracked(c, x + pad + 8, ev_y + 24, "Observed evidence", FONT_SANS, 7, TEXT_SECONDARY, 0.6)
     c.setFillColor(TEXT_PRIMARY)
@@ -748,31 +788,33 @@ def _findings_pages(c: Canvas, scan_data: dict, start_page_no: int) -> int:
     idx = 0
     while idx < len(findings):
         _full_bg(c)
-        _topbar(c, "03 detailed findings", f"Security Memo · {domain}")
-        _headline_wrapped(
+        _topbar(c, "03 detailed findings", f"Security Report | {domain}")
+        headline_top = PAGE_H - MARGIN_TOP - 70
+        headline_h = _headline_wrapped(
             c,
             MARGIN_X,
-            PAGE_H - MARGIN_TOP - 70,
-            PAGE_W - 2 * MARGIN_X - 120,
-            "Findings should read like",
-            "evidence, not filler.",
+            headline_top,
+            PAGE_W - 2 * MARGIN_X,
+            "Verified findings.",
+            "Ready for remediation.",
             size=28,
-            l1_lines=2,
+            l1_lines=1,
             l2_lines=2,
         )
+        summary_y = headline_top - headline_h - 10
         _draw_lines(
             c,
             MARGIN_X,
-            PAGE_H - MARGIN_TOP - 132,
-            _wrap("Each finding card is intentionally compact and bounded to prevent overflow.", FONT_SANS, 8.8, PAGE_W - 2 * MARGIN_X - 120, 3),
+            summary_y,
+            _wrap("Each item is compact, evidence-first, and bounded for clean review handoff.", FONT_SANS, 8.8, PAGE_W - 2 * MARGIN_X - 126, 2),
             FONT_SANS,
             8.8,
             12,
             TEXT_SECONDARY,
         )
-        _pill(c, PAGE_W - MARGIN_X - 118, PAGE_H - MARGIN_TOP - 140, "High-confidence narrative", "action")
+        _pill(c, PAGE_W - MARGIN_X - 126, summary_y - 4, "High-confidence narrative", "action")
 
-        content_top = PAGE_H - MARGIN_TOP - 168
+        content_top = summary_y - 42
         content_bottom = MARGIN_BOTTOM + 26
         cursor_y = content_top
         card_w = PAGE_W - 2 * MARGIN_X
@@ -793,6 +835,12 @@ def _findings_pages(c: Canvas, scan_data: dict, start_page_no: int) -> int:
 
 def generate_security_memo(scan_data: dict, output_path: str) -> None:
     c = Canvas(output_path, pagesize=(PAGE_W, PAGE_H))
+    meta = scan_data.get("meta", {}) if isinstance(scan_data.get("meta"), dict) else {}
+    domain = str(meta.get("domain") or "security scan").strip() or "security scan"
+    c.setTitle(f"ScanAI Security Report - {domain}")
+    c.setAuthor("ScanAI")
+    c.setSubject(f"Security assessment report for {domain}")
+    c.setCreator("ScanAI")
     _cover(c, scan_data)
     c.showPage()
     _summary(c, scan_data)
