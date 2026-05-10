@@ -17,6 +17,14 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { GoogleAuthLink } from "@/components/google-auth-link";
 
+function getSafeNextPath(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/dashboard";
+  }
+
+  return value;
+}
+
 function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,6 +34,7 @@ function LoginPageContent() {
   const { login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const nextPath = getSafeNextPath(searchParams.get("next"));
 
   useEffect(() => {
     setError(searchParams.get("error"));
@@ -38,7 +47,7 @@ function LoginPageContent() {
 
     try {
       await login(email, password);
-      router.push("/dashboard");
+      router.push(nextPath);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Login failed.";
       setError(message);
@@ -72,7 +81,7 @@ function LoginPageContent() {
             </p>
 
             <div className="mt-7 space-y-5">
-              <GoogleAuthLink />
+              <GoogleAuthLink next={nextPath} />
               <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
                 <span className="h-px flex-1 bg-black/10" />
                 <span>or continue with email</span>
