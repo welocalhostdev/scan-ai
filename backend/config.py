@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     MAX_SCANS_PER_IP: int = 1
     SCAN_TIMEOUT_SECONDS: int = 480  # 8 minutes
     TOOL_TIMEOUT_SECONDS: int = 120  # 2 minutes per individual tool
+    SCHEDULER_TOKEN: str = "scanai-scheduler-dev"
 
     # JWT Auth
     JWT_SECRET_KEY: str = "scanai-jwt-secret-change-in-production"

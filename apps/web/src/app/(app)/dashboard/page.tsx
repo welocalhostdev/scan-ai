@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -38,9 +38,11 @@ import {
   cancelScan,
   createScan,
   getScanDashboard,
+  getScanEventsWebSocketUrl,
   type DashboardCategoryCount,
   type DashboardDayCount,
   type DashboardRecentScan,
+  type ScanEventMessage,
   type ScanDashboardResponse,
 } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -91,6 +93,52 @@ function EmptyPanel({ title, text }: { title: string; text: string }) {
       <p className="font-medium text-zinc-200">{title}</p>
       <p className="mt-1 max-w-sm text-sm text-zinc-500">{text}</p>
     </div>
+  );
+}
+
+function ActiveScanBanner({ scans }: { scans: DashboardRecentScan[] }) {
+  const activeScans = scans.filter((scan) => scan.status === "running" || scan.status === "pending");
+  if (activeScans.length === 0) return null;
+
+  const primaryScan = activeScans[0];
+  const progress = Math.max(6, Math.min(100, Math.round((primaryScan.progress_step / 7) * 100)));
+  const remainingCount = Math.max(activeScans.length - 1, 0);
+
+  return (
+    <section className="dashboard-live-scan-banner overflow-hidden rounded-[6px] border border-[#4fa5b6]/26 bg-[linear-gradient(90deg,rgba(79,165,182,0.16),rgba(239,90,42,0.09))] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] border border-[#4fa5b6]/28 bg-[#4fa5b6]/12 text-[#d9f7ff]">
+            <Activity className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold text-zinc-50">Security scan running</p>
+              <span className="rounded-[3px] border border-orange-300/18 bg-orange-300/10 px-2 py-0.5 text-xs font-semibold text-orange-100">
+                {activeScans.length} active
+              </span>
+            </div>
+            <p className="mt-1 truncate text-sm text-zinc-400">
+              {primaryScan.url}{remainingCount > 0 ? ` and ${remainingCount} more scan${remainingCount === 1 ? "" : "s"}` : ""} are updating live.
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="hidden w-40 md:block">
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+              <div className="h-full rounded-full bg-gradient-to-r from-[#4fa5b6] to-[#ef5a2a]" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+          <Link
+            href={`/scan/${primaryScan.id}`}
+            className="inline-flex h-10 items-center gap-2 rounded-[4px] border border-white/12 bg-white/[0.06] px-3 text-sm font-semibold text-zinc-100 transition hover:bg-white/[0.1]"
+          >
+            Open scan
+            <ArrowUpRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1319,6 +1367,7 @@ function DashboardPageContent() {
   const [stopError, setStopError] = useState<string | null>(null);
   const [theme, setTheme] = useState<DashboardTheme>("dark");
   const [themeLoaded, setThemeLoaded] = useState(false);
+  const liveRefreshTimer = useRef<number | null>(null);
 
   const legacyBooleanView =
     (searchParams.get("surface") && "surface") ||
@@ -1377,6 +1426,54 @@ function DashboardPageContent() {
     load();
   }, [authLoading, loadDashboard, user]);
 
+  useEffect(() => {
+    if (authLoading || !user) return;
+
+    let websocket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let closedByComponent = false;
+
+    const scheduleDashboardRefresh = () => {
+      if (liveRefreshTimer.current) {
+        window.clearTimeout(liveRefreshTimer.current);
+      }
+      liveRefreshTimer.current = window.setTimeout(() => {
+        loadDashboard().catch((err) => console.error("Failed to refresh dashboard from scan event", err));
+      }, 150);
+    };
+
+    const connect = () => {
+      websocket = new WebSocket(getScanEventsWebSocketUrl());
+      websocket.onmessage = (event) => {
+        let message: ScanEventMessage;
+        try {
+          message = JSON.parse(event.data) as ScanEventMessage;
+        } catch {
+          return;
+        }
+        if (message.type === "scan.events.connected") return;
+        scheduleDashboardRefresh();
+      };
+      websocket.onclose = () => {
+        if (!closedByComponent) {
+          reconnectTimer = window.setTimeout(connect, 2000);
+        }
+      };
+      websocket.onerror = () => {
+        websocket?.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      closedByComponent = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      if (liveRefreshTimer.current) window.clearTimeout(liveRefreshTimer.current);
+      websocket?.close();
+    };
+  }, [authLoading, loadDashboard, user]);
+
   const handleStopScan = async (scanId: string) => {
     setStoppingScanId(scanId);
     setStopError(null);
@@ -1405,6 +1502,7 @@ function DashboardPageContent() {
   return (
     <div className={cn("dashboard-shell mesh-grain-canvas min-h-[calc(100vh-76px)] bg-[radial-gradient(circle_at_16%_0%,rgba(79,165,182,0.14),transparent_30%),radial-gradient(circle_at_85%_12%,rgba(239,90,42,0.1),transparent_28%),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px),#070808] bg-[length:auto,auto,72px_100%] p-4 text-zinc-100 sm:p-6", theme === "light" && "dashboard-theme-light")}>
       <div className="mx-auto max-w-[1780px] space-y-4">
+        <ActiveScanBanner scans={dashboard.recent_scans} />
         {activeView ? (
           <PrimaryWorkspacePage
             view={activeView}

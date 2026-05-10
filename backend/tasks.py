@@ -32,6 +32,7 @@ from scanner import (
     cleanup_scan_files,
 )
 from ai import generate_report
+from scan_events import publish_scan_event
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,7 @@ def _update_scan_progress(scan_id: str, step: int, status: ScanStatus = ScanStat
 
             scan.updated_at = datetime.now(timezone.utc)
             session.commit()
+            publish_scan_event(scan, "scan.updated")
             logger.info(f"Scan {scan_id}: step {step} — {STEP_LABELS.get(step, 'Unknown')}")
 
 
@@ -109,6 +111,7 @@ def _update_subtask(scan_id: str, task_key: str, task_status: str) -> None:
             scan.sub_tasks = new_sub_tasks
             scan.updated_at = datetime.now(timezone.utc)
             session.commit()
+            publish_scan_event(scan, "scan.updated")
             logger.info(f"Scan {scan_id}: subtask {task_key} -> {task_status}")
 
 
@@ -128,6 +131,7 @@ def _set_scan_failed(scan_id: str, error: str) -> None:
                 scan.sub_tasks = new_sub_tasks
             scan.updated_at = datetime.now(timezone.utc)
             session.commit()
+            publish_scan_event(scan, "scan.failed")
             logger.error(f"Scan {scan_id} failed: {error[:200]}")
 
 
@@ -163,6 +167,7 @@ def _set_scan_complete(scan_id: str, report: dict) -> None:
                 )
 
             session.commit()
+            publish_scan_event(scan, "scan.completed")
             try:
                 from pdf_storage import generate_and_store_pdf
 
@@ -175,6 +180,7 @@ def _set_scan_complete(scan_id: str, report: dict) -> None:
                     scan.pdf_url = stored_pdf_ref
                     scan.updated_at = datetime.now(timezone.utc)
                     session.commit()
+                    publish_scan_event(scan, "scan.completed")
                     logger.info(f"PDF generated automatically for scan {scan_id}")
                 else:
                     logger.warning(f"PDF auto-generation returned no object reference for scan {scan_id}")

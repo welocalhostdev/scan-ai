@@ -139,6 +139,54 @@ class Scan(Base):
         return f"<Scan id={self.id} url={self.url} status={self.status}>"
 
 
+# ── Scheduled Scans ────────────────────────────────────────────────
+
+class ScheduledScan(Base):
+    """
+    User-owned recurring scan configuration.
+    BullMQ owns the repeat timer; this table owns user intent and history.
+    """
+
+    __tablename__ = "scheduled_scans"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    url = Column(String(2048), nullable=False)
+    cron = Column(String(120), nullable=False)
+    timezone = Column(String(80), nullable=False, default="UTC")
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
+    last_scan_id = Column(String(36), nullable=True)
+
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user = relationship("User")
+
+    def __repr__(self) -> str:
+        return f"<ScheduledScan id={self.id} url={self.url} cron={self.cron}>"
+
+
 # ── Token Usage ──────────────────────────────────────────────────────
 
 class TokenUsage(Base):

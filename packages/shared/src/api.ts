@@ -157,6 +157,12 @@ export interface ScanDashboardResponse {
   recent_scans: DashboardRecentScan[];
 }
 
+export interface ScanEventMessage {
+  type: "scan.events.connected" | "scan.created" | "scan.updated" | "scan.completed" | "scan.failed";
+  user_id?: string | null;
+  scan?: DashboardRecentScan;
+}
+
 export interface AdminStats {
   total_users: number;
   total_scans: number;
@@ -275,6 +281,16 @@ export async function listMyScans(): Promise<ScanStatusResponse[]> {
 
 export async function getScanDashboard(): Promise<ScanDashboardResponse> {
   return apiFetch<ScanDashboardResponse>("/api/scans/dashboard");
+}
+
+export function getScanEventsWebSocketUrl(): string {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+  const base = new URL(apiBase || window.location.origin, window.location.origin);
+  base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
+  base.pathname = "/api/scans/ws";
+  base.search = "";
+  base.hash = "";
+  return base.toString();
 }
 
 export async function cancelScan(scanId: string): Promise<ScanCancelResponse> {

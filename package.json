@@ -18,5 +18,8 @@
   },
   "devDependencies": {
     "turbo": "^2.6.3"
+  },
+  "dependencies": {
+    "bullmq": "^5.76.6"
   }
 }

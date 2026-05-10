@@ -4,23 +4,26 @@ REST endpoints for auth, scans, and admin management.
 """
 
 import logging
+import json
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 from urllib.parse import urlparse
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import redis
-from fastapi import FastAPI, HTTPException, Depends, Query, Request, Response
+import redis.asyncio as aioredis
+from fastapi import FastAPI, HTTPException, Depends, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from config import settings
-from database import init_db, get_db
-from models import Scan, ScanStatus, User, UserRole, TokenUsage
+from database import init_db, get_db, SessionLocal
+from models import Scan, ScanStatus, ScheduledScan, User, UserRole, TokenUsage
 from validators import validate_url, URLValidationError
 from auth import (
     hash_password,
@@ -31,7 +34,9 @@ from auth import (
     require_admin,
     COOKIE_NAME,
     COOKIE_MAX_AGE,
+    decode_access_token,
 )
+from scan_events import SCAN_EVENTS_CHANNEL, publish_scan_event
 
 # Configure logging
 logging.basicConfig(
@@ -111,6 +116,42 @@ class ScanRequest(BaseModel):
 
 class ScanCreateResponse(BaseModel):
     scan_id: str
+
+
+class ScheduledScanCreateRequest(BaseModel):
+    url: str
+    cron: str
+    timezone: str = "UTC"
+    is_active: bool = True
+
+
+class ScheduledScanUpdateRequest(BaseModel):
+    url: str | None = None
+    cron: str | None = None
+    timezone: str | None = None
+    is_active: bool | None = None
+
+
+class ScheduledScanResponse(BaseModel):
+    id: str
+    url: str
+    cron: str
+    timezone: str
+    is_active: bool
+    last_run_at: str | None = None
+    last_scan_id: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class InternalScheduleResponse(ScheduledScanResponse):
+    user_id: str
+
+
+class ScheduledScanTriggerResponse(BaseModel):
+    status: str
+    scan_id: str | None = None
+    message: str
 
 
 class ScanCancelResponse(BaseModel):
@@ -261,6 +302,73 @@ def _coerce_risk_score(value: Any) -> int | None:
         return max(0, min(100, int(value)))
     except (TypeError, ValueError):
         return None
+
+
+def _validate_cron_pattern(pattern: str) -> str:
+    """Validate a standard five-field cron expression for BullMQ."""
+    normalized = " ".join(pattern.strip().split())
+    fields = normalized.split(" ")
+    if len(fields) != 5:
+        raise HTTPException(status_code=400, detail="Cron schedule must use five fields: minute hour day month weekday.")
+
+    field_re = re.compile(r"^[0-9*,/\-]+$")
+    for field in fields:
+        if not field_re.match(field):
+            raise HTTPException(status_code=400, detail="Cron fields may only contain numbers, *, commas, ranges, and step values.")
+    return normalized
+
+
+def _validate_timezone(value: str) -> str:
+    timezone_name = value.strip() or "UTC"
+    try:
+        ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        raise HTTPException(status_code=400, detail="Timezone must be a valid IANA timezone, for example UTC or Asia/Kolkata.")
+    return timezone_name
+
+
+def _scheduled_scan_to_response(schedule: ScheduledScan) -> ScheduledScanResponse:
+    return ScheduledScanResponse(
+        id=str(schedule.id),
+        url=schedule.url,
+        cron=schedule.cron,
+        timezone=schedule.timezone,
+        is_active=schedule.is_active,
+        last_run_at=schedule.last_run_at.isoformat() if schedule.last_run_at else None,
+        last_scan_id=schedule.last_scan_id,
+        created_at=schedule.created_at.isoformat(),
+        updated_at=schedule.updated_at.isoformat(),
+    )
+
+
+def _internal_schedule_to_response(schedule: ScheduledScan) -> InternalScheduleResponse:
+    data = _scheduled_scan_to_response(schedule).model_dump()
+    return InternalScheduleResponse(**data, user_id=str(schedule.user_id))
+
+
+def _require_scheduler_token(request: Request) -> None:
+    token = request.headers.get("x-scanai-scheduler-token")
+    if not token or token != settings.SCHEDULER_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid scheduler token.")
+
+
+def _enqueue_scan(db: Session, *, url: str, user_id: Any, client_ip: str) -> Scan:
+    scan = Scan(
+        url=url,
+        status=ScanStatus.PENDING,
+        progress_step=0,
+        client_ip=client_ip,
+        user_id=user_id,
+    )
+    db.add(scan)
+    db.commit()
+    db.refresh(scan)
+    publish_scan_event(scan, "scan.created")
+
+    from tasks import run_scan
+
+    run_scan.apply_async(args=[str(scan.id), url], task_id=str(scan.id))
+    return scan
 
 
 def _set_auth_cookie(response: Response, token: str) -> None:
@@ -532,6 +640,7 @@ async def create_scan(
     db.add(scan)
     db.commit()
     db.refresh(scan)
+    publish_scan_event(scan, "scan.created")
 
     scan_id = str(scan.id)
 
@@ -582,12 +691,62 @@ async def cancel_scan(
         scan.sub_tasks = next_sub_tasks
     scan.updated_at = datetime.now(timezone.utc)
     db.commit()
+    publish_scan_event(scan, "scan.failed")
 
     if scan.client_ip:
         _decrement_rate_limit(scan.client_ip)
 
     logger.info(f"Scan cancelled: id={scan_id}, user={current_user.email}")
     return ScanCancelResponse(scan_id=scan_id, status="failed", message="Scan stopped.")
+
+
+@app.websocket("/api/scans/ws")
+async def scan_events_websocket(websocket: WebSocket):
+    """Relay scan lifecycle events for the authenticated user."""
+    token = websocket.cookies.get(COOKIE_NAME) or websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    payload = decode_access_token(token)
+    if not payload or not payload.get("sub"):
+        await websocket.close(code=1008)
+        return
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == payload["sub"], User.is_active == True).first()
+        if not user:
+            await websocket.close(code=1008)
+            return
+        user_id = str(user.id)
+    finally:
+        db.close()
+
+    await websocket.accept()
+
+    redis_client = aioredis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
+    pubsub = redis_client.pubsub()
+    await pubsub.subscribe(SCAN_EVENTS_CHANNEL)
+
+    try:
+        await websocket.send_json({"type": "scan.events.connected"})
+        async for message in pubsub.listen():
+            if message.get("type") != "message":
+                continue
+            try:
+                event = json.loads(message.get("data") or "{}")
+            except json.JSONDecodeError:
+                continue
+            if event.get("user_id") != user_id:
+                continue
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await pubsub.unsubscribe(SCAN_EVENTS_CHANNEL)
+        await pubsub.close()
+        await redis_client.close()
 
 
 @app.get("/api/scans/dashboard", response_model=ScanDashboardResponse)
