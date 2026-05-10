@@ -220,6 +220,9 @@ def _compact_scan_results(scan_results: dict[str, Any]) -> dict[str, Any]:
     tls_analysis = scan_results.get("tls_analysis", []) or []
     tls_inventory = scan_results.get("tls_inventory", []) or []
     xss_findings = scan_results.get("xss_findings", []) or []
+    webcheck = scan_results.get("webcheck", {}) if isinstance(scan_results.get("webcheck"), dict) else {}
+    technology_fingerprints = scan_results.get("technology_fingerprints", []) or []
+    waf_detection = scan_results.get("waf_detection", {}) if isinstance(scan_results.get("waf_detection"), dict) else {}
 
     host_ports: dict[str, list[int]] = {}
     for item in open_ports:
@@ -412,7 +415,27 @@ def _compact_scan_results(scan_results: dict[str, Any]) -> dict[str, Any]:
             "tls_signals_found": len(tls_items),
             "tls_inventory_found": len(tls_inventory),
             "xss_signals_found": len(xss_findings),
+            "web_enrichment_elapsed_ms": webcheck.get("elapsed_ms"),
+            "technology_fingerprints_found": len(technology_fingerprints),
+            "waf_detected": waf_detection.get("detected"),
         },
+        "webcheck": {
+            "http": webcheck.get("http", {}),
+            "page": {
+                "title": (webcheck.get("page") or {}).get("title"),
+                "social_tags": (webcheck.get("page") or {}).get("social_tags", {}),
+                "same_origin_links": (webcheck.get("page") or {}).get("same_origin_links", [])[:20],
+                "external_hosts": (webcheck.get("page") or {}).get("external_hosts", [])[:20],
+                "forms": (webcheck.get("page") or {}).get("forms", [])[:10],
+                "features": (webcheck.get("page") or {}).get("features", {}),
+            },
+            "crawl_rules": webcheck.get("crawl_rules", {}),
+            "dnssec": webcheck.get("dnssec", {}),
+            "mail_security": webcheck.get("mail_security", {}),
+            "port_profile": webcheck.get("port_profile", {}),
+        },
+        "technology_fingerprints": technology_fingerprints[:40],
+        "waf_detection": waf_detection,
         "subdomain_samples": [_normalize_asset(item.get("host") if isinstance(item, dict) else item) for item in subdomains[:20]],
         "dns_samples": dns_samples,
         "live_host_samples": live_host_samples,
@@ -434,6 +457,12 @@ def _compact_scan_results(scan_results: dict[str, Any]) -> dict[str, Any]:
 def _derive_visuals(scan_results: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
     """Compute reliable visual summary data from the scan and final findings."""
     findings = report.get("findings", []) or []
+    webcheck = scan_results.get("webcheck", {}) if isinstance(scan_results.get("webcheck"), dict) else {}
+    waf_detection = scan_results.get("waf_detection", {}) if isinstance(scan_results.get("waf_detection"), dict) else {}
+    page = webcheck.get("page", {}) if isinstance(webcheck.get("page"), dict) else {}
+    http = webcheck.get("http", {}) if isinstance(webcheck.get("http"), dict) else {}
+    security_headers = http.get("security_headers", {}) if isinstance(http.get("security_headers"), dict) else {}
+    crawl_rules = webcheck.get("crawl_rules", {}) if isinstance(webcheck.get("crawl_rules"), dict) else {}
     severity_counts = Counter(str(item.get("severity", "info")).lower() for item in findings)
     category_counts = Counter(str(item.get("category", "other")).lower() for item in findings)
     affected_counts = Counter()
@@ -461,6 +490,9 @@ def _derive_visuals(scan_results: dict[str, Any], report: dict[str, Any]) -> dic
         "tls_signals": len(scan_results.get("tls_analysis", []) or []),
         "tls_inventory": len(scan_results.get("tls_inventory", []) or []),
         "xss_signals": len(scan_results.get("xss_findings", []) or []),
+        "same_origin_links": len(page.get("same_origin_links", []) or []),
+        "external_hosts": len(page.get("external_hosts", []) or []),
+        "technology_fingerprints": len(scan_results.get("technology_fingerprints", []) or []),
     }
 
     api_markers = (
@@ -549,6 +581,24 @@ def _derive_visuals(scan_results: dict[str, Any], report: dict[str, Any]) -> dic
             "documentation_endpoint_count": len(api_docs),
             "parameterized_route_count": len(parameterized_routes),
             "schema_count": len(schema_routes),
+        },
+        "web_intelligence": {
+            "final_url": http.get("final_url"),
+            "status": http.get("status"),
+            "response_time_ms": http.get("response_time_ms"),
+            "security_header_score": security_headers.get("score"),
+            "missing_security_headers": security_headers.get("missing", [])[:12],
+            "hsts": security_headers.get("hsts", {}),
+            "cookie_summary": http.get("cookie_summary", {}),
+            "server_fingerprints": http.get("server_fingerprints", {}),
+            "dnssec": webcheck.get("dnssec", {}),
+            "mail_security": webcheck.get("mail_security", {}),
+            "robots": crawl_rules.get("robots", {}),
+            "sitemap": crawl_rules.get("sitemap", {}),
+            "security_txt": crawl_rules.get("security_txt", {}),
+            "port_profile": webcheck.get("port_profile", {}),
+            "waf_detection": waf_detection,
+            "technology_fingerprints": scan_results.get("technology_fingerprints", [])[:30],
         },
         "assurance": {
             "mode": "unauthenticated_external_scan",

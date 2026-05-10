@@ -59,8 +59,12 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${sofiaSans.variable} ${geistMono.variable} h-full antialiased font-sans`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground transition-colors duration-500">
+      <body
+        className="min-h-full flex flex-col bg-background text-foreground transition-colors duration-500"
+        suppressHydrationWarning
+      >
         <ClientProviders>{children}</ClientProviders>
       </body>
     </html>

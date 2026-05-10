@@ -153,7 +153,7 @@ export function AppSidebar() {
           })}
         </div>
         <Link
-          href="/dashboard?settings=true"
+          href="/settings"
           className="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-zinc-500 transition-colors hover:bg-white/[0.045] hover:text-zinc-200"
         >
           <Settings className="h-4 w-4" />

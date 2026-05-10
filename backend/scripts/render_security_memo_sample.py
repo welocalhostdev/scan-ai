@@ -78,11 +78,10 @@ def main() -> None:
         ],
     }
 
-    out = Path(__file__).resolve().parents[2] / "sample-security-memo-390x844.pdf"
+    out = Path(__file__).resolve().parents[2] / "sample-security-memo-a4-portrait.pdf"
     generate_security_memo(scan_data, str(out))
     print(f"Wrote {out}")
 
 
 if __name__ == "__main__":
     main()
-

@@ -12,6 +12,8 @@ import {
   Bell,
   Bot,
   Boxes,
+  CalendarClock,
+  CalendarPlus,
   CheckCircle2,
   Clock3,
   Download,
@@ -29,6 +31,7 @@ import {
   Sparkles,
   Target,
   TerminalSquare,
+  Trash2,
   UserRound,
   X,
   XCircle,
@@ -36,12 +39,23 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import {
   cancelScan,
+  createScanTarget,
+  createSchedule,
   createScan,
+  deleteSchedule,
+  getAccountUsage,
   getScanDashboard,
   getScanEventsWebSocketUrl,
+  listScanTargets,
+  listSchedules,
+  updateSchedule,
+  verifyScanTarget,
+  type AccountUsage,
   type DashboardCategoryCount,
   type DashboardDayCount,
   type DashboardRecentScan,
+  type ScheduledScan,
+  type ScanTarget,
   type ScanEventMessage,
   type ScanDashboardResponse,
 } from "@/lib/api";
@@ -381,9 +395,11 @@ function RiskGauge({ value }: { value: number | null }) {
 
 function QuickScanForm({
   onCreated,
+  onSchedule,
   variant = "default",
 }: {
   onCreated: () => void;
+  onSchedule?: (target: string) => void;
   variant?: "default" | "hero";
 }) {
   const [url, setUrl] = useState("");
@@ -391,6 +407,12 @@ function QuickScanForm({
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const heroVariant = variant === "hero";
+
+  const normalizedUrl = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -404,7 +426,7 @@ function QuickScanForm({
     setError(null);
 
     try {
-      const scanUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      const scanUrl = normalizedUrl(trimmed);
       const { scan_id } = await createScan(scanUrl);
       onCreated();
       router.push(`/scan/${scan_id}`);
@@ -419,32 +441,46 @@ function QuickScanForm({
     <form onSubmit={handleSubmit} className="mt-5">
       <div
         className={cn(
-          "dashboard-input-shell scan-input-shell flex gap-2 rounded-[4px] border p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+          "dashboard-input-shell scan-input-shell flex flex-col gap-2 rounded-[4px] border p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:flex-row sm:items-center",
           heroVariant ? "border-white/18 bg-black/34" : "border-white/10 bg-black/30"
         )}
       >
-        <div className={cn("scan-input-icon flex items-center pl-2", heroVariant ? "!text-white/65" : "text-zinc-500")}>
-          <TerminalSquare className="h-4 w-4" />
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className={cn("scan-input-icon flex items-center pl-2", heroVariant ? "!text-white/65" : "text-zinc-500")}>
+            <TerminalSquare className="h-4 w-4" />
+          </div>
+          <input
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            disabled={loading}
+            placeholder="https://app.example.com"
+            className={cn(
+              "scan-input-field h-10 min-w-0 flex-1 bg-transparent px-2 text-sm outline-none",
+              heroVariant ? "!text-white placeholder:!text-white/60" : "text-zinc-100 placeholder:text-zinc-600"
+            )}
+            aria-label="Target URL"
+          />
         </div>
-        <input
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          disabled={loading}
-          placeholder="https://app.example.com"
-          className={cn(
-            "scan-input-field h-10 min-w-0 flex-1 bg-transparent px-2 text-sm outline-none",
-            heroVariant ? "!text-white placeholder:!text-white/60" : "text-zinc-100 placeholder:text-zinc-600"
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-[3px] bg-white px-5 text-sm font-semibold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+          >
+            <Play className="h-4 w-4" />
+            {loading ? "Starting" : "Run"}
+          </button>
+          {onSchedule && (
+            <button
+              type="button"
+              onClick={() => onSchedule(normalizedUrl(url))}
+              className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-[3px] border border-white/16 bg-white/[0.06] px-4 text-sm font-semibold text-zinc-100 transition-colors hover:bg-white/[0.1] sm:flex-none"
+            >
+              <CalendarPlus className="h-4 w-4" />
+              Schedule
+            </button>
           )}
-          aria-label="Target URL"
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="inline-flex h-10 items-center gap-2 rounded-[3px] bg-white px-5 text-sm font-semibold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Play className="h-4 w-4" />
-          {loading ? "Starting" : "Run"}
-        </button>
+        </div>
       </div>
       {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
     </form>
@@ -533,6 +569,13 @@ type PanelId =
 
 const VIEW_IDS: ViewId[] = ["surface", "scans", "findings", "reports", "agents"];
 const SCAN_FILTERS: ScanFilter[] = ["all", "active", "failed", "complete"];
+
+const SCHEDULE_PRESETS = [
+  { label: "Hourly", cron: "0 * * * *" },
+  { label: "Daily 9 AM", cron: "0 9 * * *" },
+  { label: "Weekly Monday", cron: "0 9 * * 1" },
+  { label: "Monthly", cron: "0 9 1 * *" },
+];
 
 const PANEL_TITLES: Record<PanelId, { title: string; eyebrow: string; icon: React.ElementType }> = {
   activity: { title: "Live Activity", eyebrow: "Recent scan events", icon: Activity },
@@ -672,6 +715,8 @@ function ScanTable({
   stoppingScanId,
   stopError,
   onStopScan,
+  limit,
+  viewMoreHref,
   emptyTitle = "No scans yet",
   emptyText = "Run a target scan to populate this command view.",
 }: {
@@ -679,19 +724,34 @@ function ScanTable({
   stoppingScanId: string | null;
   stopError: string | null;
   onStopScan: (scanId: string) => void;
+  limit?: number;
+  viewMoreHref?: string;
   emptyTitle?: string;
   emptyText?: string;
 }) {
+  const visibleScans = typeof limit === "number" ? scans.slice(0, limit) : scans;
+  const hiddenCount = scans.length - visibleScans.length;
+
   return (
     <DashboardCard>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-semibold text-zinc-50">Recent scans</h2>
         <div className="flex items-center gap-3">
           {stopError && <span className="text-xs text-red-300">{stopError}</span>}
-          <span className="text-sm text-zinc-500">{scans.length} shown</span>
+          <span className="text-sm text-zinc-500">
+            {hiddenCount > 0 ? `${visibleScans.length} of ${scans.length}` : `${scans.length} shown`}
+          </span>
+          {hiddenCount > 0 && viewMoreHref && (
+            <Link
+              href={viewMoreHref}
+              className="inline-flex h-8 items-center gap-1 rounded-[3px] border border-white/10 bg-white/[0.04] px-3 text-xs font-semibold text-zinc-200 transition-colors hover:bg-white/[0.075]"
+            >
+              View more <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
         </div>
       </div>
-      {scans.length === 0 ? (
+      {visibleScans.length === 0 ? (
         <EmptyPanel title={emptyTitle} text={emptyText} />
       ) : (
         <div className="overflow-x-auto">
@@ -706,7 +766,7 @@ function ScanTable({
               </tr>
             </thead>
             <tbody>
-              {scans.map((scan) => (
+              {visibleScans.map((scan) => (
                 <tr key={scan.id} className="border-b border-white/6 last:border-0 hover:bg-white/[0.025]">
                   <td className="max-w-sm truncate px-3 py-3 font-medium text-zinc-200">{scan.url}</td>
                   <td className="px-3 py-3 font-mono text-zinc-400">{scan.risk_score ?? "--"}</td>
@@ -755,22 +815,202 @@ function ScanTable({
   );
 }
 
+function ScheduleManager({
+  schedules,
+  onChanged,
+  prefillUrl,
+  focusSignal,
+  defaultTimezone,
+}: {
+  schedules: ScheduledScan[];
+  onChanged: () => Promise<void>;
+  prefillUrl?: string;
+  focusSignal?: number;
+  defaultTimezone: string;
+}) {
+  const [url, setUrl] = useState("");
+  const [cron, setCron] = useState(SCHEDULE_PRESETS[1].cron);
+  const [saving, setSaving] = useState(false);
+  const [busyScheduleId, setBusyScheduleId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const urlInputRef = useRef<HTMLInputElement | null>(null);
+  const lastFocusSignalRef = useRef(focusSignal);
+
+  const normalizeScheduleUrl = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  };
+
+  useEffect(() => {
+    if (focusSignal === undefined || lastFocusSignalRef.current === focusSignal) return;
+    lastFocusSignalRef.current = focusSignal;
+    const nextUrl = normalizeScheduleUrl(prefillUrl || "");
+    if (nextUrl) setUrl(nextUrl);
+    window.setTimeout(() => urlInputRef.current?.focus(), 220);
+  }, [focusSignal, prefillUrl]);
+
+  const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await createSchedule({ url: normalizeScheduleUrl(url), cron, timezone: defaultTimezone, is_active: true });
+      setUrl("");
+      await onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create schedule.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggle = async (schedule: ScheduledScan) => {
+    setBusyScheduleId(schedule.id);
+    setError(null);
+    try {
+      await updateSchedule(schedule.id, { is_active: !schedule.is_active });
+      await onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update schedule.");
+    } finally {
+      setBusyScheduleId(null);
+    }
+  };
+
+  const handleDelete = async (scheduleId: string) => {
+    setBusyScheduleId(scheduleId);
+    setError(null);
+    try {
+      await deleteSchedule(scheduleId);
+      await onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete schedule.");
+    } finally {
+      setBusyScheduleId(null);
+    }
+  };
+
+  return (
+    <DashboardCard>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-zinc-50">Scheduled checkups</h2>
+          <p className="mt-1 text-sm text-zinc-500">Set a regular scan cadence for targets that need ongoing watch.</p>
+        </div>
+        <CalendarClock className="h-5 w-5 text-[#4fa5b6]" />
+      </div>
+
+      <form onSubmit={handleCreate} className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_190px_auto]">
+        <input
+          ref={urlInputRef}
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder="https://app.example.com"
+          className="dashboard-schedule-input h-11 rounded-[4px] border border-white/10 bg-black/24 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+          required
+        />
+        <select
+          value={cron}
+          onChange={(event) => setCron(event.target.value)}
+          className="dashboard-schedule-input h-11 rounded-[4px] border border-white/10 bg-black/24 px-3 text-sm text-zinc-100 outline-none"
+        >
+          {SCHEDULE_PRESETS.map((preset) => (
+            <option key={preset.cron} value={preset.cron}>{preset.label}</option>
+          ))}
+          <option value={cron}>Custom</option>
+        </select>
+        <button
+          type="submit"
+          disabled={saving}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-[4px] bg-white px-4 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <CalendarPlus className="h-4 w-4" />
+          {saving ? "Saving" : "Schedule checkup"}
+        </button>
+      </form>
+      <p className="mt-3 text-xs text-zinc-500">
+        Uses account timezone <span className="font-semibold text-zinc-300">{defaultTimezone}</span>. Change it in{" "}
+        <Link href="/settings" className="font-semibold text-[#bdeeff] hover:underline">Settings</Link>.
+      </p>
+
+      <input
+        value={cron}
+        onChange={(event) => setCron(event.target.value)}
+        aria-label="Cron expression"
+        className="dashboard-schedule-input mt-3 h-10 w-full rounded-[4px] border border-white/10 bg-black/18 px-3 font-mono text-xs text-zinc-300 outline-none placeholder:text-zinc-600"
+        placeholder="0 9 * * *"
+      />
+
+      {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+
+      <div className="mt-5 space-y-2">
+        {schedules.length === 0 ? (
+          <WorkspaceEmpty title="No recurring scans" text="Create a schedule and the BullMQ scheduler will trigger scans in the background." />
+        ) : (
+          schedules.map((schedule) => (
+            <div key={schedule.id} className="dashboard-schedule-row flex flex-col gap-3 rounded-[4px] border border-white/10 bg-black/18 p-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-zinc-100">{schedule.url}</p>
+                  <span className={cn("rounded-[3px] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]", schedule.is_active ? "bg-[#4fa5b6]/12 text-[#d9f7ff]" : "bg-white/[0.06] text-zinc-500")}>
+                    {schedule.is_active ? "Active" : "Paused"}
+                  </span>
+                </div>
+                <p className="mt-1 font-mono text-xs text-zinc-500">{schedule.cron} · {schedule.timezone}</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Last run {schedule.last_run_at ? new Date(schedule.last_run_at).toLocaleString() : "not yet"}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleToggle(schedule)}
+                  disabled={busyScheduleId === schedule.id}
+                  className="inline-flex h-9 items-center rounded-[3px] border border-white/10 bg-white/[0.04] px-3 text-xs font-semibold text-zinc-200 transition hover:bg-white/[0.075] disabled:opacity-60"
+                >
+                  {schedule.is_active ? "Pause" : "Resume"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(schedule.id)}
+                  disabled={busyScheduleId === schedule.id}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[3px] border border-red-300/15 bg-red-300/[0.06] text-red-200 transition hover:bg-red-300/[0.1] disabled:opacity-60"
+                  aria-label={`Delete schedule for ${schedule.url}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </DashboardCard>
+  );
+}
+
 function DashboardPanelDrawer({
   panel,
   dashboard,
+  usage,
+  targets,
   user,
   theme,
   onThemeChange,
   onClose,
   onRefresh,
+  onTargetsChanged,
 }: {
   panel: PanelId | null;
   dashboard: ScanDashboardResponse;
+  usage: AccountUsage | null;
+  targets: ScanTarget[];
   user: { name?: string; email?: string; role?: string } | null;
   theme: DashboardTheme;
   onThemeChange: (theme: DashboardTheme) => void;
   onClose: () => void;
   onRefresh: () => Promise<void>;
+  onTargetsChanged: () => Promise<void>;
 }) {
   const [settings, setSettings] = useState({
     autoRefresh: true,
@@ -782,6 +1022,8 @@ function DashboardPanelDrawer({
   const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [notificationsCleared, setNotificationsCleared] = useState(false);
+  const [targetInput, setTargetInput] = useState("");
+  const [targetBusyId, setTargetBusyId] = useState<string | null>(null);
 
   if (!panel) return null;
 
@@ -799,6 +1041,32 @@ function DashboardPanelDrawer({
   const showNotice = (message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(null), 1800);
+  };
+
+  const handleAddTarget = async () => {
+    const value = targetInput.trim();
+    if (!value) return;
+    try {
+      const target = await createScanTarget(value);
+      setTargetInput("");
+      await onTargetsChanged();
+      showNotice(`Add TXT record for ${target.domain}.`);
+    } catch (err) {
+      showNotice(err instanceof Error ? err.message : "Unable to add target.");
+    }
+  };
+
+  const handleVerifyTarget = async (targetId: string) => {
+    setTargetBusyId(targetId);
+    try {
+      const result = await verifyScanTarget(targetId);
+      await onTargetsChanged();
+      showNotice(result.message);
+    } catch (err) {
+      showNotice(err instanceof Error ? err.message : "Target is not verified yet.");
+    } finally {
+      setTargetBusyId(null);
+    }
   };
 
   return (
@@ -921,6 +1189,50 @@ function DashboardPanelDrawer({
 
           {panel === "settings" && (
             <>
+              <DrawerSection title="Verified scan targets">
+                <div className="flex gap-2">
+                  <input
+                    value={targetInput}
+                    onChange={(event) => setTargetInput(event.target.value)}
+                    placeholder="example.com"
+                    className="min-w-0 flex-1 rounded-[4px] border border-white/10 bg-black/28 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddTarget}
+                    className="inline-flex h-10 items-center rounded-[4px] bg-white px-3 text-sm font-semibold text-zinc-950 transition-colors hover:bg-zinc-200"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {targets.map((target) => (
+                    <div key={target.id} className="rounded-[4px] border border-white/10 bg-black/18 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-zinc-100">{target.domain}</p>
+                          <p className="mt-1 font-mono text-[11px] text-zinc-500">{target.verification_record_name}</p>
+                          <p className="mt-1 break-all font-mono text-[11px] text-zinc-500">{target.verification_record_value}</p>
+                        </div>
+                        <span className={cn("rounded-[3px] px-2 py-1 text-[10px] font-semibold uppercase", target.status === "verified" ? "bg-[#4fa5b6]/12 text-[#d9f7ff]" : "bg-[#ef5a2a]/10 text-orange-200")}>
+                          {target.status}
+                        </span>
+                      </div>
+                      {target.status !== "verified" && (
+                        <button
+                          type="button"
+                          onClick={() => handleVerifyTarget(target.id)}
+                          disabled={targetBusyId === target.id}
+                          className="mt-3 inline-flex h-8 items-center rounded-[3px] border border-white/10 bg-white/[0.04] px-3 text-xs font-semibold text-zinc-200 transition-colors hover:bg-white/[0.07] disabled:opacity-60"
+                        >
+                          {targetBusyId === target.id ? "Checking" : "Verify DNS"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {targets.length === 0 && <p className="text-sm text-zinc-500">Add and verify a domain before starting customer scans.</p>}
+                </div>
+              </DrawerSection>
               <DrawerSection title="Workspace behavior">
                 <ToggleRow label="Light dashboard theme" description="Switch the dashboard canvas, cards, drawers, and header to a bright B2B mode." checked={theme === "light"} checkedLabel="Light" uncheckedLabel="Dark" onChange={() => onThemeChange(theme === "light" ? "dark" : "light")} />
                 <ToggleRow label="Auto-refresh dashboard" description="Refresh metrics while scans are active." checked={settings.autoRefresh} onChange={() => setSettings((prev) => ({ ...prev, autoRefresh: !prev.autoRefresh }))} />
@@ -951,10 +1263,13 @@ function DashboardPanelDrawer({
               </DrawerSection>
               <DrawerSection title="Usage">
                 <div className="grid grid-cols-3 gap-3">
-                  <MiniStat label="Scans" value={dashboard.total_scans} />
-                  <MiniStat label="Reports" value={dashboard.reports_ready} />
-                  <MiniStat label="Findings" value={dashboard.total_findings} />
+                  <MiniStat label="Plan" value={usage?.plan || "beta"} />
+                  <MiniStat label="Monthly" value={`${usage?.monthly_scans_used ?? dashboard.total_scans}/${usage?.monthly_scan_limit ?? "--"}`} />
+                  <MiniStat label="Active" value={`${usage?.active_scans ?? dashboard.active_scans}/${usage?.active_scan_limit ?? "--"}`} />
                 </div>
+                <p className="mt-3 text-xs leading-5 text-zinc-500">
+                  Target verification is {usage?.requires_target_verification ? "required" : "optional"} for this workspace.
+                </p>
               </DrawerSection>
             </>
           )}
@@ -1073,16 +1388,22 @@ function SurfaceWorkspace({
 
 function ScansWorkspace({
   dashboard,
+  schedules,
+  defaultTimezone,
   filter,
   stoppingScanId,
   stopError,
   onStopScan,
+  onSchedulesChanged,
 }: {
   dashboard: ScanDashboardResponse;
+  schedules: ScheduledScan[];
+  defaultTimezone: string;
   filter: ScanFilter;
   stoppingScanId: string | null;
   stopError: string | null;
   onStopScan: (scanId: string) => void;
+  onSchedulesChanged: () => Promise<void>;
 }) {
   const filteredScans = dashboard.recent_scans.filter((scan) => {
     if (filter === "active") return scan.status === "running" || scan.status === "pending";
@@ -1138,6 +1459,8 @@ function ScansWorkspace({
         emptyTitle={`No ${filterLabels[filter].toLowerCase()} scans`}
         emptyText="The selected scan queue is empty right now."
       />
+
+      <ScheduleManager schedules={schedules} onChanged={onSchedulesChanged} defaultTimezone={defaultTimezone} />
     </div>
   );
 }
@@ -1312,8 +1635,8 @@ function AgentsWorkspace({ dashboard }: { dashboard: ScanDashboardResponse }) {
               <ActionButton tone="primary" onClick={handleSaveProfile}>
                 <Sparkles className="h-4 w-4" /> {profileSaved ? "Saved" : "Save profile"}
               </ActionButton>
-              <ActionButton onClick={() => router.push("/dashboard?view=agents&panel=settings")}>
-                <Settings className="h-4 w-4" /> Open settings drawer
+              <ActionButton onClick={() => router.push("/settings")}>
+                <Settings className="h-4 w-4" /> Open settings
               </ActionButton>
             </div>
           </div>
@@ -1326,7 +1649,10 @@ function AgentsWorkspace({ dashboard }: { dashboard: ScanDashboardResponse }) {
 function PrimaryWorkspacePage({
   view,
   dashboard,
+  schedules,
+  defaultTimezone,
   onRefresh,
+  onSchedulesChanged,
   scanFilter,
   stoppingScanId,
   stopError,
@@ -1334,7 +1660,10 @@ function PrimaryWorkspacePage({
 }: {
   view: ViewId;
   dashboard: ScanDashboardResponse;
+  schedules: ScheduledScan[];
+  defaultTimezone: string;
   onRefresh: () => Promise<void>;
+  onSchedulesChanged: () => Promise<void>;
   scanFilter: ScanFilter;
   stoppingScanId: string | null;
   stopError: string | null;
@@ -1345,10 +1674,13 @@ function PrimaryWorkspacePage({
     return (
       <ScansWorkspace
         dashboard={dashboard}
+        schedules={schedules}
+        defaultTimezone={defaultTimezone}
         filter={scanFilter}
         stoppingScanId={stoppingScanId}
         stopError={stopError}
         onStopScan={onStopScan}
+        onSchedulesChanged={onSchedulesChanged}
       />
     );
   }
@@ -1362,12 +1694,18 @@ function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [dashboard, setDashboard] = useState<ScanDashboardResponse>(EMPTY_DASHBOARD);
+  const [schedules, setSchedules] = useState<ScheduledScan[]>([]);
+  const [usage, setUsage] = useState<AccountUsage | null>(null);
+  const [targets, setTargets] = useState<ScanTarget[]>([]);
   const [loading, setLoading] = useState(true);
   const [stoppingScanId, setStoppingScanId] = useState<string | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
   const [theme, setTheme] = useState<DashboardTheme>("dark");
   const [themeLoaded, setThemeLoaded] = useState(false);
+  const [scheduleDraftUrl, setScheduleDraftUrl] = useState("");
+  const [scheduleFocusSignal, setScheduleFocusSignal] = useState(0);
   const liveRefreshTimer = useRef<number | null>(null);
+  const scheduleSectionRef = useRef<HTMLDivElement | null>(null);
 
   const legacyBooleanView =
     (searchParams.get("surface") && "surface") ||
@@ -1387,6 +1725,19 @@ function DashboardPageContent() {
     if (!user) return;
     const data = await getScanDashboard();
     setDashboard(data);
+  }, [user]);
+
+  const loadSchedules = useCallback(async () => {
+    if (!user) return;
+    const data = await listSchedules();
+    setSchedules(data);
+  }, [user]);
+
+  const loadAccountControls = useCallback(async () => {
+    if (!user) return;
+    const [usageData, targetData] = await Promise.all([getAccountUsage(), listScanTargets()]);
+    setUsage(usageData);
+    setTargets(targetData);
   }, [user]);
 
   useEffect(() => {
@@ -1415,7 +1766,7 @@ function DashboardPageContent() {
       }
 
       try {
-        await loadDashboard();
+        await Promise.all([loadDashboard(), loadSchedules(), loadAccountControls()]);
       } catch (err) {
         console.error("Failed to load dashboard", err);
       } finally {
@@ -1424,7 +1775,7 @@ function DashboardPageContent() {
     }
 
     load();
-  }, [authLoading, loadDashboard, user]);
+  }, [authLoading, loadDashboard, loadSchedules, loadAccountControls, user]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -1488,6 +1839,12 @@ function DashboardPageContent() {
     }
   };
 
+  const handleScheduleFromHero = useCallback((target: string) => {
+    setScheduleDraftUrl(target);
+    setScheduleFocusSignal((current) => current + 1);
+    scheduleSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   if (authLoading || loading) {
     return <DashboardLoading />;
   }
@@ -1507,7 +1864,10 @@ function DashboardPageContent() {
           <PrimaryWorkspacePage
             view={activeView}
             dashboard={dashboard}
+            schedules={schedules}
+            defaultTimezone={user?.timezone || "UTC"}
             onRefresh={loadDashboard}
+            onSchedulesChanged={loadSchedules}
             scanFilter={scanFilter}
             stoppingScanId={stoppingScanId}
             stopError={stopError}
@@ -1529,7 +1889,7 @@ function DashboardPageContent() {
                 Welcome back, {user?.name || "Operator"}. Start with a URL; the dashboard stays focused on posture, reports, and follow-up.
               </p>
               <div className="mt-6 max-w-2xl">
-                <QuickScanForm onCreated={loadDashboard} variant="hero" />
+                <QuickScanForm onCreated={loadDashboard} onSchedule={handleScheduleFromHero} variant="hero" />
               </div>
               <p className="mt-4 text-xs font-medium uppercase tracking-[0.14em] text-white/42">
                 Crawl / triage / report
@@ -1606,6 +1966,18 @@ function DashboardPageContent() {
             stoppingScanId={stoppingScanId}
             stopError={stopError}
             onStopScan={handleStopScan}
+            limit={5}
+            viewMoreHref="/dashboard?view=scans"
+          />
+        </div>
+
+        <div ref={scheduleSectionRef} id="scheduled-checkups" className="scroll-mt-24">
+          <ScheduleManager
+            schedules={schedules}
+            onChanged={loadSchedules}
+            prefillUrl={scheduleDraftUrl}
+            focusSignal={scheduleFocusSignal}
+            defaultTimezone={user?.timezone || "UTC"}
           />
         </div>
 
@@ -1630,11 +2002,14 @@ function DashboardPageContent() {
       <DashboardPanelDrawer
         panel={activePanel}
         dashboard={dashboard}
+        usage={usage}
+        targets={targets}
         user={user}
         theme={theme}
         onThemeChange={setTheme}
         onClose={() => router.push(drawerCloseHref)}
         onRefresh={loadDashboard}
+        onTargetsChanged={loadAccountControls}
       />
     </div>
   );

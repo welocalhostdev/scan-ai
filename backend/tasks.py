@@ -13,7 +13,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 
 from config import settings
 from database import get_db_session
-from models import Scan, ScanStatus, TokenUsage
+from models import EmailDeliveryStatus, EmailNotification, Scan, ScanStatus, TokenUsage, User
 from validators import extract_domain
 from scanner import (
     run_subfinder,
@@ -27,6 +27,9 @@ from scanner import (
     run_ffuf_api_discovery,
     run_arjun_parameter_discovery,
     run_openapi_schema_discovery,
+    run_webcheck_enrichment,
+    run_webanalyze,
+    run_wafw00f,
     run_testssl,
     run_dalfox,
     cleanup_scan_files,
@@ -53,6 +56,7 @@ celery_app.conf.update(
     task_soft_time_limit=settings.SCAN_TIMEOUT_SECONDS,
     task_time_limit=settings.SCAN_TIMEOUT_SECONDS + 30,
     worker_max_tasks_per_child=50,  # Restart workers periodically to free memory
+    worker_prefetch_multiplier=1,  # Keep queue backpressure honest for long scans
 )
 
 # Step labels for progress tracking
@@ -65,6 +69,31 @@ STEP_LABELS = {
     6: "Analysing TLS & headers",
     7: "Generating AI report",
 }
+
+
+def _queue_completion_email(session, scan: Scan) -> None:
+    """Create one pending completion email after a PDF report is available."""
+    if not scan.user_id or not scan.pdf_url:
+        return
+
+    existing = session.query(EmailNotification).filter(EmailNotification.scan_id == scan.id).first()
+    if existing:
+        return
+
+    user = session.query(User).filter(User.id == scan.user_id).first()
+    if not user or not user.email:
+        return
+
+    domain = extract_domain(scan.url)
+    notification = EmailNotification(
+        scan_id=scan.id,
+        user_id=scan.user_id,
+        recipient_email=user.email,
+        subject=f"ScanAI report ready for {domain}",
+        status=EmailDeliveryStatus.PENDING,
+    )
+    session.add(notification)
+    logger.info(f"Queued completion email notification for scan {scan.id} to {user.email}")
 
 
 def _update_scan_progress(scan_id: str, step: int, status: ScanStatus = ScanStatus.RUNNING) -> None:
@@ -85,6 +114,9 @@ def _update_scan_progress(scan_id: str, step: int, status: ScanStatus = ScanStat
                     "katana": "pending",
                     "ffuf_api": "pending",
                     "openapi": "pending",
+                    "webcheck": "pending",
+                    "webanalyze": "pending",
+                    "wafw00f": "pending",
                     "nuclei": "pending",
                     "nuclei_api": "pending",
                     "arjun": "pending",
@@ -179,6 +211,7 @@ def _set_scan_complete(scan_id: str, report: dict) -> None:
                 if stored_pdf_ref:
                     scan.pdf_url = stored_pdf_ref
                     scan.updated_at = datetime.now(timezone.utc)
+                    _queue_completion_email(session, scan)
                     session.commit()
                     publish_scan_event(scan, "scan.completed")
                     logger.info(f"PDF generated automatically for scan {scan_id}")
@@ -202,6 +235,12 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
     domain = extract_domain(url)
     scan_results = {}
     scan_id_str = str(scan_id)
+    pipeline_slots = asyncio.Semaphore(max(1, settings.SCAN_PIPELINE_PARALLELISM))
+
+    async def limited(task_name: str, task_coro):
+        async with pipeline_slots:
+            logger.info(f"Scan {scan_id_str}: acquired pipeline slot for {task_name}")
+            return await task_coro()
 
     try:
         # Phase 1 — Subdomain discovery (sequential, must complete first)
@@ -216,24 +255,30 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
             scan_results["subdomains"] = []
             _update_subtask(scan_id_str, "subfinder", "failed")
 
-        _update_subtask(scan_id_str, "dnsx", "running")
-        try:
-            domains_to_resolve = [domain]
-            for sub in scan_results.get("subdomains", []):
-                if isinstance(sub, dict) and "host" in sub:
-                    domains_to_resolve.append(str(sub["host"]))
-                elif isinstance(sub, str):
-                    domains_to_resolve.append(sub)
-            dns_records = await run_dnsx(scan_id_str, domains_to_resolve)
-            scan_results["dns_records"] = dns_records
-            _update_subtask(scan_id_str, "dnsx", "complete")
-        except Exception as e:
-            logger.warning(f"dnsx failed (non-fatal): {e}")
-            scan_results["dns_records"] = []
-            _update_subtask(scan_id_str, "dnsx", "failed")
-
-        # Phase 2 — HTTP probing + Port scanning (parallel execution)
+        # Phase 2 — DNS resolution + port scanning + HTTP probing.
+        # Port scanning is independent, so it starts while DNS data is prepared
+        # for httpx. This keeps the pipeline moving without increasing scan count.
         _update_scan_progress(scan_id_str, 2)
+
+        async def run_dnsx_task():
+            """DNS resolution task."""
+            _update_subtask(scan_id_str, "dnsx", "running")
+            try:
+                domains_to_resolve = [domain]
+                for sub in scan_results.get("subdomains", []):
+                    if isinstance(sub, dict) and "host" in sub:
+                        domains_to_resolve.append(str(sub["host"]))
+                    elif isinstance(sub, str):
+                        domains_to_resolve.append(sub)
+                dns_records = await run_dnsx(scan_id_str, domains_to_resolve)
+                scan_results["dns_records"] = dns_records
+                _update_subtask(scan_id_str, "dnsx", "complete")
+                return "success"
+            except Exception as e:
+                logger.warning(f"dnsx failed (non-fatal): {e}")
+                scan_results["dns_records"] = []
+                _update_subtask(scan_id_str, "dnsx", "failed")
+                return "failed"
 
         async def run_httpx_task():
             """HTTP probing task."""
@@ -279,9 +324,11 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
                 _update_subtask(scan_id_str, "naabu", "failed")
                 return "failed"
 
-        # Run httpx and naabu in parallel
-        logger.info(f"Scan {scan_id_str}: Starting parallel phase 2 (httpx + naabu)")
-        await asyncio.gather(run_httpx_task(), run_naabu_task())
+        logger.info(f"Scan {scan_id_str}: Starting parallel phase 2 (dnsx + naabu, then httpx)")
+        naabu_future = asyncio.create_task(limited("naabu", run_naabu_task))
+        await limited("dnsx", run_dnsx_task)
+        await limited("httpx", run_httpx_task)
+        await naabu_future
         logger.info(f"Scan {scan_id_str}: Phase 2 complete")
 
         # Phase 3 — Crawl first, then run active checks.
@@ -301,6 +348,24 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
                 _update_subtask(scan_id_str, "katana", "failed")
                 return "failed"
 
+        async def run_webcheck_task():
+            """Fast passive website intelligence task."""
+            _update_subtask(scan_id_str, "webcheck", "running")
+            try:
+                enrichment = await run_webcheck_enrichment(
+                    url,
+                    scan_id_str,
+                    open_ports=scan_results.get("open_ports", []),
+                )
+                scan_results["webcheck"] = enrichment
+                _update_subtask(scan_id_str, "webcheck", "complete")
+                return "success"
+            except Exception as e:
+                logger.warning(f"webcheck enrichment failed (non-fatal): {e}")
+                scan_results["webcheck"] = {}
+                _update_subtask(scan_id_str, "webcheck", "failed")
+                return "failed"
+
         async def run_nuclei_task():
             """Vulnerability scanning task."""
             _update_subtask(scan_id_str, "nuclei", "running")
@@ -313,6 +378,34 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
                 logger.warning(f"nuclei failed (non-fatal): {e}")
                 scan_results["vulnerabilities"] = []
                 _update_subtask(scan_id_str, "nuclei", "failed")
+                return "failed"
+
+        async def run_webanalyze_task():
+            """Broad technology fingerprinting task."""
+            _update_subtask(scan_id_str, "webanalyze", "running")
+            try:
+                technologies = await run_webanalyze(url, scan_id_str)
+                scan_results["technology_fingerprints"] = technologies
+                _update_subtask(scan_id_str, "webanalyze", "complete")
+                return "success"
+            except Exception as e:
+                logger.warning(f"webanalyze failed (non-fatal): {e}")
+                scan_results["technology_fingerprints"] = []
+                _update_subtask(scan_id_str, "webanalyze", "failed")
+                return "failed"
+
+        async def run_wafw00f_task():
+            """WAF and security-edge fingerprinting task."""
+            _update_subtask(scan_id_str, "wafw00f", "running")
+            try:
+                waf = await run_wafw00f(url, scan_id_str)
+                scan_results["waf_detection"] = waf
+                _update_subtask(scan_id_str, "wafw00f", "complete")
+                return "success"
+            except Exception as e:
+                logger.warning(f"wafw00f failed (non-fatal): {e}")
+                scan_results["waf_detection"] = {}
+                _update_subtask(scan_id_str, "wafw00f", "failed")
                 return "failed"
 
         async def run_ffuf_api_task():
@@ -436,20 +529,25 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
                 _update_subtask(scan_id_str, "dalfox", "failed")
                 return "failed"
 
-        # Crawl first (to feed active checks), then run vuln/TLS/XSS in parallel.
-        logger.info(f"Scan {scan_id_str}: Starting phase 3a (katana)")
-        await run_katana_task()
-        logger.info(f"Scan {scan_id_str}: Starting phase 3b (ffuf api discovery)")
-        await run_ffuf_api_task()
+        # Crawl, passive enrichment, and API wordlist discovery can run together;
+        # active checks wait for crawl/API route candidates.
+        logger.info(f"Scan {scan_id_str}: Starting phase 3a (katana + webcheck + fingerprinting + ffuf)")
+        await asyncio.gather(
+            limited("katana", run_katana_task),
+            limited("webcheck", run_webcheck_task),
+            limited("webanalyze", run_webanalyze_task),
+            limited("wafw00f", run_wafw00f_task),
+            limited("ffuf_api", run_ffuf_api_task),
+        )
         logger.info(f"Scan {scan_id_str}: Starting phase 3c (nuclei + api checks + schema + testssl + dalfox + arjun)")
         await asyncio.gather(
-            run_nuclei_task(),
-            run_nuclei_api_task(),
-            run_openapi_task(),
-            run_testssl_task(),
-            run_tlsx_task(),
-            run_dalfox_task(),
-            run_arjun_task(),
+            limited("nuclei", run_nuclei_task),
+            limited("nuclei_api", run_nuclei_api_task),
+            limited("openapi", run_openapi_task),
+            limited("testssl", run_testssl_task),
+            limited("tlsx", run_tlsx_task),
+            limited("dalfox", run_dalfox_task),
+            limited("arjun", run_arjun_task),
         )
         logger.info(f"Scan {scan_id_str}: Phase 3 complete")
 

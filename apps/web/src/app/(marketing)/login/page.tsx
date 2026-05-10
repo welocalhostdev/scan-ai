@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -15,8 +15,9 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { GoogleAuthLink } from "@/components/google-auth-link";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -24,6 +25,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    setError(searchParams.get("error"));
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,8 +68,17 @@ export default function LoginPage() {
               Welcome back.
             </h1>
             <p className="mt-4 max-w-md text-sm leading-6 text-zinc-600">
-              Sign in to open your ScanAI command desk.
+              Use Google for instant access, or continue with your operator credentials.
             </p>
+
+            <div className="mt-7 space-y-5">
+              <GoogleAuthLink />
+              <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                <span className="h-px flex-1 bg-black/10" />
+                <span>or continue with email</span>
+                <span className="h-px flex-1 bg-black/10" />
+              </div>
+            </div>
 
             <form onSubmit={handleSubmit} className="mt-7 space-y-5">
               <div>
@@ -180,5 +195,13 @@ export default function LoginPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

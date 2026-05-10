@@ -9,7 +9,9 @@ dist/
 build/
 .venv/
 venv/
+.env.local
 
+.env.production
 # Node
 node_modules/
 .next/
@@ -29,5 +31,7 @@ Thumbs.db
 *.swp
 *.swo
 .env
+.env.local
+.env.production
 # Scan output
 /tmp/scanai/

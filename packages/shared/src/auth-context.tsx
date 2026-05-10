@@ -20,8 +20,9 @@ interface AuthContextType {
   user: UserResponse | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, otp: string, timezone?: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   isAdmin: boolean;
 }
 
@@ -53,8 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = useCallback(
-    async (name: string, email: string, password: string) => {
-      const res = await signupUser(name, email, password);
+    async (name: string, email: string, password: string, otp: string, timezone?: string) => {
+      const res = await signupUser(name, email, password, otp, timezone);
       setUser(res.user);
     },
     []
@@ -65,10 +66,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const me = await getMe();
+    setUser(me);
+  }, []);
+
   const isAdmin = user?.role === "admin";
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, isAdmin }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshUser, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );

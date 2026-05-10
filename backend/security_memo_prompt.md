@@ -1,7 +1,7 @@
 # ScanAI — Security Memo PDF Generation Prompt
 
 > Drop this prompt verbatim into your PDF generation codebase.  
-> The reference design is a 9:16 mobile-first "security memo" — editorial, warm, and opinionated.  
+> The reference design is an A4 portrait "security memo" — editorial, warm, and opinionated.  
 > Do not default to a corporate report aesthetic. Match the reference exactly.
 
 ---
@@ -9,7 +9,7 @@
 ## ROLE
 
 You are generating a **ScanAI Security Memo** — a publication-quality, single-target attack surface report  
-delivered as a 9:16 portrait PDF. The tone is a senior security analyst writing directly to a founder or  
+delivered as an A4 portrait PDF. The tone is a senior security analyst writing directly to a founder or  
 CTO, not a compliance officer writing for an audit trail. Every word and visual choice should reflect that.
 
 ---
@@ -17,10 +17,10 @@ CTO, not a compliance officer writing for an audit trail. Every word and visual 
 ## DESIGN LANGUAGE (reference-exact)
 
 ### Canvas
-- **Page size:** 390 × 844 pt (9:16 portrait — matches the reference exactly, not A4)
+- **Page size:** A4 portrait, 595.28 × 841.89 pt
 - **Background:** warm cream `#F2EDE6` — applied full-bleed on every page
-- **Margins:** 28pt left/right, 36pt top, 28pt bottom
-- **Gutter between two-column layouts:** 16pt
+- **Margins:** 40pt left/right, 42pt top, 36pt bottom
+- **Gutter between two-column layouts:** 20pt
 
 ### Color tokens
 ```
@@ -99,7 +99,7 @@ The PDF has exactly **4 spreads** in this order. Each spread = one full page.
   - Col 2: `01` + `HIGH-SEVERITY ITEM`
   - Col 3: `05` + `EXPOSURE SIGNALS REVIEWED`
   - Col 4: `72` (orange) + italic serif `H` (as unit) + `SUGGESTED REMEDIATION WINDOW`
-- **Footer:** `SCANAI · SECURITY MEMO · 9:16 CONCEPT` left, `01` right — both 6.5pt uppercase, `TEXT_SECONDARY`
+- **Footer:** `SCANAI · SECURITY MEMO · A4 PORTRAIT` left, `01` right — both 6.5pt uppercase, `TEXT_SECONDARY`
 
 ---
 
@@ -418,7 +418,7 @@ def generate_security_memo(scan_data: dict, output_path: str) -> None:
 
 Build and test in this sequence. Do not move to the next step until the current one renders correctly:
 
-1. Set up page canvas (390×844pt, cream background, footer frame)
+1. Set up page canvas (A4 portrait, cream background, footer frame)
 2. Implement all primitive drawers: `draw_pill`, `draw_card_bg`, `draw_donut`, `draw_bar_chart`, `draw_evidence_block`, `draw_numbered_step`
 3. Build Spread 01 (cover) with hardcoded placeholder data
 4. Build Spread 02 (executive summary)
@@ -433,7 +433,7 @@ Build and test in this sequence. Do not move to the next step until the current 
 
 Before shipping any output, verify every item:
 
-- [ ] Page size is exactly 390×844pt — not A4, not letter
+- [ ] Page size is exactly A4 portrait — not letter, not landscape
 - [ ] Background cream `#F2EDE6` applied full-bleed on every page
 - [ ] Hero headlines use mixed bold-sans + italic-serif treatment on all 4 spreads
 - [ ] Cover circles bleed off top-right corner, appear on cover only
@@ -447,7 +447,7 @@ Before shipping any output, verify every item:
 - [ ] No card bleeds into adjacent card — 12pt minimum gap between cards
 - [ ] Footer appears on every page, same position, same style
 - [ ] Page numbers are `01`, `02`, `03`, `04` — zero-padded, right-aligned
-- [ ] No A4 margins — use the 28pt left/right spec
+- [ ] Print-ready A4 margins are applied consistently
 - [ ] Section labels are orange, tracked, uppercase — not the same style as body text
 - [ ] Mixed-font headline treatment is never replaced with a single-font fallback
 
@@ -455,4 +455,3 @@ Before shipping any output, verify every item:
 
 *This is not a compliance report. It is a security memo. The design should feel like something a founder  
 would want to share — not file away. Every visual decision should serve that goal.*
-

@@ -195,11 +195,16 @@ export default function ReportPage() {
   const report = scan.report;
   const attackSurface = report._visuals?.attack_surface;
   const apiSurface = report._visuals?.api_surface;
+  const webIntelligence = report._visuals?.web_intelligence;
   const assurance = report._visuals?.assurance;
   const apiRoutes = apiSurface?.candidate_routes || [];
   const apiDocs = apiSurface?.documentation_endpoints || [];
   const parameterizedRoutes = apiSurface?.parameterized_routes || [];
   const schemas = apiSurface?.schemas || [];
+  const missingHeaders = webIntelligence?.missing_security_headers || [];
+  const serverFingerprints = Object.entries(webIntelligence?.server_fingerprints || {});
+  const technologyFingerprints = webIntelligence?.technology_fingerprints || [];
+  const wafDetection = webIntelligence?.waf_detection;
 
   async function handleGeneratePdf() {
     try {
@@ -347,6 +352,75 @@ export default function ReportPage() {
               </div>
             ))}
           </div>
+
+          {webIntelligence && (
+            <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+              <div className="rounded-sm border border-white/8 bg-black/15 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Website intelligence</p>
+                    <p className="mt-2 truncate font-mono text-xs text-zinc-400">{webIntelligence.final_url || scan.url}</p>
+                  </div>
+                  <span className="rounded-full bg-white/8 px-2.5 py-1 font-mono text-xs text-zinc-300">
+                    {webIntelligence.response_time_ms ?? 0}ms
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {[
+                    ["Header score", webIntelligence.security_header_score ?? "n/a"],
+                    ["Cookies", webIntelligence.cookie_summary?.count ?? 0],
+                    ["DNSSEC", webIntelligence.dnssec?.enabled ? "on" : "off"],
+                    ["DMARC", webIntelligence.mail_security?.dmarc_policy || (webIntelligence.mail_security?.has_dmarc ? "set" : "missing")],
+                    ["WAF", wafDetection?.detected ? wafDetection.name || "detected" : wafDetection?.skipped ? "skipped" : "none"],
+                    ["Tech", technologyFingerprints.length],
+                    ["robots.txt", webIntelligence.robots?.available ? "found" : "missing"],
+                    ["security.txt", webIntelligence.security_txt?.available ? "found" : "missing"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded border border-white/8 bg-white/[0.03] p-2">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">{label}</p>
+                      <p className="mt-1 truncate font-mono text-sm font-semibold text-zinc-100">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-sm border border-white/8 bg-black/15 p-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Missing hardening headers</p>
+                  <div className="space-y-2">
+                    {missingHeaders.slice(0, 6).map((item) => (
+                      <p key={item.header} className="truncate rounded bg-orange-300/[0.07] px-2 py-1.5 font-mono text-xs text-orange-100">
+                        {item.header}
+                      </p>
+                    ))}
+                    {missingHeaders.length === 0 && <p className="text-sm text-zinc-500">No missing high-signal browser headers retained.</p>}
+                  </div>
+                </div>
+                <div className="rounded-sm border border-white/8 bg-black/15 p-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Server fingerprints</p>
+                  <div className="space-y-2">
+                    {serverFingerprints.slice(0, 6).map(([name, value]) => (
+                      <p key={name} className="truncate rounded bg-sky-300/[0.06] px-2 py-1.5 font-mono text-xs text-sky-100">
+                        {name}: {value}
+                      </p>
+                    ))}
+                    {serverFingerprints.length === 0 && <p className="text-sm text-zinc-500">No explicit server fingerprint headers observed.</p>}
+                  </div>
+                </div>
+                <div className="rounded-sm border border-white/8 bg-black/15 p-4 md:col-span-2">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Technology fingerprints</p>
+                  <div className="flex flex-wrap gap-2">
+                    {technologyFingerprints.slice(0, 14).map((item) => (
+                      <span key={`${item.name}-${item.version || ""}`} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-xs text-zinc-300">
+                        {item.name}{item.version ? ` ${item.version}` : ""}
+                      </span>
+                    ))}
+                    {technologyFingerprints.length === 0 && <p className="text-sm text-zinc-500">No extra technology fingerprints observed beyond primary HTTP probes.</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {schemas.length > 0 && (
             <div className="mt-4 space-y-3">

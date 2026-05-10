@@ -34,6 +34,19 @@ class UserRole(str, enum.Enum):
     USER = "user"
 
 
+class UserPlan(str, enum.Enum):
+    """Commercial plan buckets for quota enforcement."""
+    BETA = "beta"
+    PRO = "pro"
+    INTERNAL = "internal"
+
+
+class AccountVerificationPurpose(str, enum.Enum):
+    """One-time verification flows for account security changes."""
+    SIGNUP = "signup"
+    EMAIL_CHANGE = "email_change"
+
+
 class User(Base):
     """
     Represents a registered user.
@@ -51,6 +64,21 @@ class User(Base):
     email = Column(String(320), nullable=False, unique=True, index=True)
     name = Column(String(100), nullable=False)
     hashed_password = Column(String(255), nullable=False)
+    google_sub = Column(String(255), nullable=True, unique=True, index=True)
+    avatar_url = Column(String(2048), nullable=True)
+    auth_provider = Column(String(40), nullable=False, default="password")
+    signup_ip = Column(String(45), nullable=True)
+    timezone = Column(String(80), nullable=False, default="UTC")
+    email_verified = Column(Boolean, nullable=False, default=True)
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    plan = Column(
+        Enum(UserPlan),
+        nullable=False,
+        default=UserPlan.BETA,
+    )
+    monthly_scan_limit = Column(Integer, nullable=False, default=25)
+    active_scan_limit = Column(Integer, nullable=False, default=1)
+    schedule_limit = Column(Integer, nullable=False, default=3)
     role = Column(
         Enum(UserRole),
         nullable=False,
@@ -65,10 +93,51 @@ class User(Base):
 
     # Relationship
     scans = relationship("Scan", back_populates="user", cascade="all, delete-orphan")
+    scan_targets = relationship("ScanTarget", back_populates="user", cascade="all, delete-orphan")
     token_usage = relationship("TokenUsage", back_populates="user")
+    account_verifications = relationship("AccountVerification", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email} role={self.role}>"
+
+
+class AccountVerification(Base):
+    """Hashed, expiring OTP challenge for signup and account email changes."""
+
+    __tablename__ = "account_verifications"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    email = Column(String(320), nullable=False, index=True)
+    purpose = Column(
+        Enum(AccountVerificationPurpose),
+        nullable=False,
+        index=True,
+    )
+    otp_hash = Column(String(128), nullable=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    user = relationship("User", back_populates="account_verifications")
+
+    def __repr__(self) -> str:
+        return f"<AccountVerification id={self.id} email={self.email} purpose={self.purpose}>"
 
 
 # ── Scan ───────────────────────────────────────────────────────────
@@ -79,6 +148,73 @@ class ScanStatus(str, enum.Enum):
     RUNNING = "running"
     COMPLETE = "complete"
     FAILED = "failed"
+
+
+class EmailDeliveryStatus(str, enum.Enum):
+    """Lifecycle for queued scan completion emails."""
+    PENDING = "pending"
+    QUEUED = "queued"
+    SENDING = "sending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class ScanTargetStatus(str, enum.Enum):
+    """Ownership verification state for a scan target."""
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REVOKED = "revoked"
+
+
+class ScanTarget(Base):
+    """
+    User-owned target authorization.
+
+    Paid beta scans require a verified target so the product is not an open
+    scanner for arbitrary third-party domains.
+    """
+
+    __tablename__ = "scan_targets"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    domain = Column(String(255), nullable=False, index=True)
+    status = Column(
+        Enum(ScanTargetStatus),
+        nullable=False,
+        default=ScanTargetStatus.PENDING,
+        index=True,
+    )
+    verification_token = Column(String(120), nullable=False)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user = relationship("User", back_populates="scan_targets")
+
+    def __repr__(self) -> str:
+        return f"<ScanTarget id={self.id} domain={self.domain} status={self.status}>"
 
 
 class Scan(Base):
@@ -185,6 +321,67 @@ class ScheduledScan(Base):
 
     def __repr__(self) -> str:
         return f"<ScheduledScan id={self.id} url={self.url} cron={self.cron}>"
+
+
+# ── Email Notifications ───────────────────────────────────────────
+
+class EmailNotification(Base):
+    """
+    Persisted completion email state.
+    BullMQ dispatches delivery, while this row keeps the retry/status audit trail.
+    """
+
+    __tablename__ = "email_notifications"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    scan_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("scans.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    recipient_email = Column(String(320), nullable=False)
+    subject = Column(String(255), nullable=False)
+    status = Column(
+        Enum(EmailDeliveryStatus),
+        nullable=False,
+        default=EmailDeliveryStatus.PENDING,
+        index=True,
+    )
+    attempts = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
+    queued_at = Column(DateTime(timezone=True), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    scan = relationship("Scan")
+    user = relationship("User")
+
+    def __repr__(self) -> str:
+        return f"<EmailNotification id={self.id} scan_id={self.scan_id} status={self.status}>"
 
 
 # ── Token Usage ──────────────────────────────────────────────────────

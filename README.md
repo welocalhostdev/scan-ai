@@ -80,11 +80,28 @@ docker compose up -d
 | `OPENROUTER_BASE_URL` | OpenRouter base URL | `https://openrouter.ai/api/v1` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://scanai:scanai@db:5432/scanai` |
 | `REDIS_URL` | Redis connection string | `redis://redis:6379/0` |
+| `SCHEDULER_TOKEN` | Shared internal token used by the BullMQ scheduler service | `scanai-scheduler-dev` |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP server used to email completed PDF reports | — / `587` |
+| `SMTP_USER` / `SMTP_PASSWORD` | SMTP credentials for report delivery | — |
+| `SMTP_FROM` | Sender displayed on report emails | `SMTP_USER` |
+| `EMAIL_RATE_LIMIT_MAX` | Max emails per throttle window | `10` |
+| `EMAIL_RATE_LIMIT_DURATION_MS` | Email throttle window in milliseconds | `60000` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth web client credentials for one-click sign-in | — |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Callback registered in Google Cloud Console | `http://localhost:3000/api/auth/google/callback` |
+| `GOOGLE_ALLOWED_DOMAIN` | Optional Google Workspace / Cloud Identity hosted-domain restriction | — |
 | `SECRET_KEY` | Application secret key | `change-me-in-production` |
+| `AUTH_COOKIE_DOMAIN` | Optional cookie domain for sharing login across web/admin subdomains, e.g. `.welocalhost.com` | — |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `http://localhost:3000` |
 | `MAX_SCANS_PER_IP` | Max concurrent scans per IP | `1` |
+| `PAID_BETA_MODE` | Enables paid-beta guardrails in health/readiness metadata | `true` |
+| `REQUIRE_TARGET_VERIFICATION` | Require DNS TXT target verification before customer scans | `true` |
+| `BETA_MONTHLY_SCAN_LIMIT` | Default monthly scans for new beta users | `25` |
+| `BETA_ACTIVE_SCAN_LIMIT` | Default concurrent scans for new beta users | `1` |
+| `BETA_SCHEDULE_LIMIT` | Default recurring schedules for new beta users | `3` |
 | `SCAN_TIMEOUT_SECONDS` | Hard timeout for entire scan | `480` |
 | `TOOL_TIMEOUT_SECONDS` | Timeout per individual tool | `120` |
+| `TLS_DEEP_SCAN_ENABLED` | Enable focused `testssl.sh` deep TLS pass in addition to fast `tlsx` inventory | `true` |
+| `TLS_DEEP_SCAN_TIMEOUT_SECONDS` | Timeout for focused `testssl.sh` pass | `45` |
 
 ## API Endpoints
 

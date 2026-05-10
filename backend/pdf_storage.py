@@ -1,9 +1,8 @@
 """
-ScanAI — HTML-to-PDF report generation and MinIO storage.
+ScanAI — PDF report generation and MinIO storage.
 
-This module renders an internal HTML report from normalized scan results,
-prints it to a 9:16 PDF using a local Chromium-compatible browser, and
-uploads the final PDF to MinIO.
+This module renders normalized scan results into a strict A4 portrait PDF
+and uploads the final PDF to MinIO.
 """
 
 from __future__ import annotations

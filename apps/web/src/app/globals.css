@@ -778,9 +778,16 @@ html[data-scanai-dashboard-theme="light"] .app-main-shell {
 .dashboard-theme-light .dashboard-drawer-search,
 .dashboard-theme-light .dashboard-drawer-row,
 .dashboard-theme-light .dashboard-scan-row,
+.dashboard-theme-light .dashboard-schedule-row,
 .dashboard-theme-light .dashboard-mini-stat {
   background: rgba(20, 20, 19, 0.035) !important;
   border-color: rgba(20, 20, 19, 0.13) !important;
+}
+
+.dashboard-theme-light .dashboard-schedule-input {
+  background: rgba(255, 254, 250, 0.88) !important;
+  border-color: rgba(20, 20, 19, 0.14) !important;
+  color: #141413 !important;
 }
 
 .dashboard-theme-light .dashboard-drawer-search svg,

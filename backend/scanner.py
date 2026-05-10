@@ -8,6 +8,9 @@ import asyncio
 import json
 import os
 import logging
+import re
+import time
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -84,6 +87,69 @@ OPENAPI_CANDIDATE_PATHS = [
 ]
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
+SECURITY_HEADERS = {
+    "strict-transport-security": "HTTP Strict Transport Security",
+    "content-security-policy": "Content Security Policy",
+    "x-frame-options": "Clickjacking protection",
+    "x-content-type-options": "MIME sniffing protection",
+    "referrer-policy": "Referrer policy",
+    "permissions-policy": "Browser permissions policy",
+    "cross-origin-opener-policy": "Cross-origin opener isolation",
+    "cross-origin-embedder-policy": "Cross-origin embedder isolation",
+    "cross-origin-resource-policy": "Cross-origin resource policy",
+}
+
+FINGERPRINT_HEADERS = {
+    "server",
+    "x-powered-by",
+    "x-aspnet-version",
+    "x-aspnetmvc-version",
+    "x-generator",
+    "via",
+    "x-cache",
+    "cf-cache-status",
+    "cf-ray",
+    "x-vercel-id",
+    "x-served-by",
+}
+
+COMMON_SERVICE_PORTS = {
+    20: "ftp-data",
+    21: "ftp",
+    22: "ssh",
+    23: "telnet",
+    25: "smtp",
+    53: "dns",
+    80: "http",
+    110: "pop3",
+    143: "imap",
+    443: "https",
+    445: "smb",
+    465: "smtps",
+    587: "submission",
+    993: "imaps",
+    995: "pop3s",
+    1433: "mssql",
+    1521: "oracle",
+    2049: "nfs",
+    2375: "docker",
+    2376: "docker-tls",
+    3000: "node-dev",
+    3306: "mysql",
+    3389: "rdp",
+    5432: "postgresql",
+    5601: "kibana",
+    5900: "vnc",
+    6379: "redis",
+    8080: "http-alt",
+    8443: "https-alt",
+    9200: "elasticsearch",
+    9300: "elasticsearch-transport",
+    11211: "memcached",
+    27017: "mongodb",
+}
+
+COMMON_TLS_PORTS = {443, 4443, 8443, 9443}
 
 
 def _ensure_output_dir() -> None:
@@ -227,6 +293,339 @@ def _safe_yaml_load(text: str) -> Any:
         return json.loads(text)
     except json.JSONDecodeError:
         return yaml.safe_load(text)
+
+
+class _WebMetadataParser(HTMLParser):
+    """Small HTML metadata/link parser for fast passive enrichment."""
+
+    def __init__(self, base_url: str):
+        super().__init__(convert_charrefs=True)
+        self.base_url = base_url
+        self.title_parts: list[str] = []
+        self._in_title = False
+        self.meta: dict[str, str] = {}
+        self.links: list[str] = []
+        self.scripts: list[str] = []
+        self.forms: list[dict[str, Any]] = []
+        self.features = {
+            "password_inputs": 0,
+            "external_scripts": 0,
+            "inline_scripts": 0,
+            "forms": 0,
+        }
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr = {key.lower(): (value or "") for key, value in attrs}
+        tag = tag.lower()
+        if tag == "title":
+            self._in_title = True
+            return
+
+        if tag == "meta":
+            key = attr.get("property") or attr.get("name")
+            content = attr.get("content")
+            if key and content:
+                normalized_key = key.strip().lower()
+                if normalized_key.startswith(("og:", "twitter:", "description")):
+                    self.meta[normalized_key] = content.strip()[:300]
+            return
+
+        if tag == "a" and attr.get("href"):
+            self.links.append(urljoin(self.base_url, attr["href"]))
+            return
+
+        if tag == "script":
+            src = attr.get("src")
+            if src:
+                absolute = urljoin(self.base_url, src)
+                self.scripts.append(absolute)
+                base_host = urlparse(self.base_url).hostname
+                script_host = urlparse(absolute).hostname
+                if base_host and script_host and base_host != script_host:
+                    self.features["external_scripts"] += 1
+            else:
+                self.features["inline_scripts"] += 1
+            return
+
+        if tag == "form":
+            self.features["forms"] += 1
+            self.forms.append(
+                {
+                    "method": (attr.get("method") or "get").upper(),
+                    "action": urljoin(self.base_url, attr.get("action") or ""),
+                }
+            )
+            return
+
+        if tag == "input" and attr.get("type", "").lower() == "password":
+            self.features["password_inputs"] += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "title":
+            self._in_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            value = data.strip()
+            if value:
+                self.title_parts.append(value)
+
+    @property
+    def title(self) -> str:
+        return " ".join(self.title_parts).strip()[:180]
+
+
+def _header_value(headers: httpx_client.Headers | dict[str, str], name: str) -> str | None:
+    try:
+        value = headers.get(name)
+    except AttributeError:
+        value = None
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _analyze_security_headers(url: str, headers: httpx_client.Headers) -> dict[str, Any]:
+    present: dict[str, str] = {}
+    missing: list[dict[str, str]] = []
+    for header, label in SECURITY_HEADERS.items():
+        value = _header_value(headers, header)
+        if value:
+            present[header] = value[:500]
+        elif header != "strict-transport-security" or urlparse(url).scheme == "https":
+            missing.append({"header": header, "purpose": label})
+
+    hsts = present.get("strict-transport-security", "")
+    hsts_directives = {part.strip().lower() for part in hsts.split(";") if part.strip()}
+    max_age = 0
+    for directive in hsts_directives:
+        if directive.startswith("max-age="):
+            try:
+                max_age = int(directive.split("=", 1)[1])
+            except ValueError:
+                max_age = 0
+            break
+
+    score = max(0, 100 - (len(missing) * 10))
+    if hsts and max_age < 15_552_000:
+        score = max(0, score - 10)
+    if _header_value(headers, "content-security-policy") and "unsafe-inline" in present.get("content-security-policy", ""):
+        score = max(0, score - 5)
+
+    return {
+        "score": score,
+        "present": present,
+        "missing": missing,
+        "hsts": {
+            "enabled": bool(hsts),
+            "max_age": max_age,
+            "include_subdomains": "includesubdomains" in hsts_directives,
+            "preload": "preload" in hsts_directives,
+        },
+    }
+
+
+async def _dig_short(name: str, record_type: str, timeout: int = 8) -> list[str]:
+    try:
+        stdout, stderr, returncode = await _run_subprocess(
+            ["dig", "+short", name, record_type],
+            timeout=timeout,
+        )
+    except Exception as e:
+        logger.debug(f"dig failed for {name} {record_type}: {e}")
+        return []
+
+    if returncode != 0:
+        logger.debug(f"dig returned code {returncode} for {name} {record_type}: {stderr[:200]}")
+        return []
+    return [line.strip().strip('"') for line in stdout.splitlines() if line.strip()]
+
+
+async def _dnssec_status(domain: str) -> dict[str, Any]:
+    ds_records, dnskey_records = await asyncio.gather(
+        _dig_short(domain, "DS"),
+        _dig_short(domain, "DNSKEY"),
+    )
+    return {
+        "enabled": bool(ds_records or dnskey_records),
+        "ds_records": ds_records[:6],
+        "dnskey_records": dnskey_records[:4],
+    }
+
+
+async def _mail_policy_status(domain: str) -> dict[str, Any]:
+    mx_records, txt_records, dmarc_records = await asyncio.gather(
+        _dig_short(domain, "MX"),
+        _dig_short(domain, "TXT"),
+        _dig_short(f"_dmarc.{domain}", "TXT"),
+    )
+    spf_records = [record for record in txt_records if record.lower().startswith("v=spf1")]
+    dmarc_policy = None
+    if dmarc_records:
+        policy_match = re.search(r"\bp=([a-zA-Z0-9_-]+)", " ".join(dmarc_records))
+        dmarc_policy = policy_match.group(1).lower() if policy_match else None
+    return {
+        "mx_records": mx_records[:12],
+        "spf_records": spf_records[:4],
+        "dmarc_records": dmarc_records[:4],
+        "has_mx": bool(mx_records),
+        "has_spf": bool(spf_records),
+        "has_dmarc": bool(dmarc_records),
+        "dmarc_policy": dmarc_policy,
+    }
+
+
+async def _fetch_text_resource(
+    client: httpx_client.AsyncClient,
+    url: str,
+    max_bytes: int = 250_000,
+) -> dict[str, Any]:
+    try:
+        response = await client.get(url)
+    except httpx_client.HTTPError as e:
+        return {"url": url, "available": False, "error": str(e)[:160]}
+    text = response.text[:max_bytes] if response.status_code < 500 else ""
+    return {
+        "url": str(response.url),
+        "available": response.status_code in {200, 201, 202},
+        "status": response.status_code,
+        "content_type": response.headers.get("content-type"),
+        "bytes": len(response.content),
+        "body": text,
+    }
+
+
+def _summarize_robots(resource: dict[str, Any]) -> dict[str, Any]:
+    body = str(resource.pop("body", "") or "")
+    disallows = []
+    sitemaps = []
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, _, value = line.partition(":")
+        key = key.strip().lower()
+        value = value.strip()
+        if key == "disallow" and value:
+            disallows.append(value)
+        elif key == "sitemap" and value:
+            sitemaps.append(value)
+    return {**resource, "disallow_count": len(disallows), "sample_disallows": disallows[:20], "sitemaps": sitemaps[:10]}
+
+
+def _summarize_sitemap(resource: dict[str, Any]) -> dict[str, Any]:
+    body = str(resource.pop("body", "") or "")
+    urls = re.findall(r"<loc>\s*([^<]+?)\s*</loc>", body, flags=re.IGNORECASE)
+    return {**resource, "url_count": len(urls), "sample_urls": urls[:20]}
+
+
+def _summarize_security_txt(resource: dict[str, Any]) -> dict[str, Any]:
+    body = str(resource.pop("body", "") or "")
+    fields: dict[str, list[str]] = {}
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, _, value = line.partition(":")
+        if key and value:
+            fields.setdefault(key.strip().lower(), []).append(value.strip()[:240])
+    return {**resource, "fields": fields, "contact_count": len(fields.get("contact", []))}
+
+
+def _summarize_ports(open_ports: list[dict[str, Any]] | None) -> dict[str, Any]:
+    exposed = []
+    risky = []
+    for item in open_ports or []:
+        if not isinstance(item, dict):
+            continue
+        port = item.get("port")
+        try:
+            port_number = int(port)
+        except (TypeError, ValueError):
+            continue
+        service = COMMON_SERVICE_PORTS.get(port_number, "unknown")
+        host = str(item.get("host") or item.get("ip") or item.get("url") or "").strip()
+        entry = {"host": host, "port": port_number, "service": service}
+        exposed.append(entry)
+        if port_number not in {80, 443}:
+            risky.append(entry)
+    return {
+        "open_port_count": len(exposed),
+        "exposed_services": exposed[:60],
+        "non_web_services": risky[:30],
+    }
+
+
+def _normalize_technology_items(data: Any) -> list[dict[str, Any]]:
+    """Normalize webanalyze-style technology fingerprints."""
+    raw_matches: list[Any] = []
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict) and isinstance(item.get("matches"), list):
+                raw_matches.extend(item["matches"])
+            elif isinstance(item, dict):
+                raw_matches.append(item)
+    elif isinstance(data, dict):
+        if isinstance(data.get("matches"), list):
+            raw_matches.extend(data["matches"])
+        elif isinstance(data.get("technologies"), list):
+            raw_matches.extend(data["technologies"])
+
+    technologies: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw_matches:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("app_name") or item.get("name") or item.get("technology") or "").strip()
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        technologies.append(
+            {
+                "name": name,
+                "version": item.get("version"),
+                "categories": item.get("categories") if isinstance(item.get("categories"), list) else [],
+                "confidence": item.get("confidence"),
+                "website": item.get("website"),
+            }
+        )
+    return technologies[:80]
+
+
+def _parse_wafw00f_output(stdout: str, data: Any) -> dict[str, Any]:
+    """Normalize WAFW00F JSON when available, with stdout parsing fallback."""
+    if isinstance(data, list) and data:
+        first = data[0] if isinstance(data[0], dict) else {}
+    elif isinstance(data, dict):
+        first = data
+    else:
+        first = {}
+
+    detected = bool(first.get("detected") or first.get("firewall") or first.get("waf"))
+    waf_name = first.get("firewall") or first.get("waf") or first.get("name")
+    manufacturer = first.get("manufacturer") or first.get("company")
+
+    if not waf_name:
+        match = re.search(r"is behind\s+(.+?)\s+WAF", stdout, flags=re.IGNORECASE)
+        if match:
+            waf_name = match.group(1).strip()
+            detected = True
+    if "No WAF detected" in stdout or "seems to be behind a WAF or some sort of security solution" in stdout:
+        detected = detected or "security solution" in stdout
+
+    request_match = re.search(r"Number of requests:\s*(\d+)", stdout, flags=re.IGNORECASE)
+    return {
+        "detected": detected,
+        "name": waf_name,
+        "manufacturer": manufacturer,
+        "requests": int(request_match.group(1)) if request_match else first.get("requests"),
+        "raw": first or _truncate_text_for_record(stdout, 1200),
+    }
+
+
+def _truncate_text_for_record(text: str, limit: int) -> str:
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 16].rstrip() + "... [truncated]"
 
 
 def _looks_like_openapi_schema(value: Any) -> bool:
@@ -407,6 +806,17 @@ async def run_httpx(scan_id: str, input_file: str | None = None, domains: list[s
         "-tech-detect",
         "-status-code",
         "-title",
+        "-content-length",
+        "-content-type",
+        "-location",
+        "-response-time",
+        "-favicon",
+        "-jarm",
+        "-cname",
+        "-cdn",
+        "-threads", "50",
+        "-retries", "1",
+        "-timeout", "8",
         "-o", output_file,
     ]
 
@@ -473,7 +883,7 @@ async def run_tlsx(scan_id: str, targets: list[str]) -> list[dict[str, Any]]:
 
     stdout, stderr, returncode = await _run_subprocess(
         cmd,
-        timeout=settings.TOOL_TIMEOUT_SECONDS,
+        timeout=max(20, min(settings.TOOL_TIMEOUT_SECONDS, 45)),
         stdin_data="\n".join(normalized_targets[:150]),
     )
 
@@ -557,6 +967,9 @@ async def run_nuclei(url: str, scan_id: str) -> list[dict[str, Any]]:
         "nuclei",
         "-u", url,
         "-severity", "low,medium,high,critical",
+        "-as",
+        "-rate-limit", "120",
+        "-retries", "1",
         "-json",
         "-o", output_file,
     ]
@@ -590,6 +1003,8 @@ async def run_nuclei_api_checks(url: str, scan_id: str) -> list[dict[str, Any]]:
         "-u", url,
         "-tags", "api,swagger,openapi,graphql,cors,exposure,misconfig",
         "-severity", "info,low,medium,high,critical",
+        "-rate-limit", "80",
+        "-retries", "1",
         "-json",
         "-o", output_file,
     ]
@@ -810,13 +1225,254 @@ async def run_openapi_schema_discovery(
     return schemas
 
 
+async def run_webcheck_enrichment(
+    url: str,
+    scan_id: str,
+    open_ports: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """
+    Fast Web-Check style passive enrichment.
+
+    Fetches only the submitted site and well-known text resources, then combines
+    that with DNSSEC/mail policy probes and a readable port profile.
+    """
+    del scan_id  # kept for a stable scanner function signature
+    parsed = urlparse(url)
+    domain = parsed.hostname or parsed.netloc or parsed.path
+    base_url = _target_base_url(url)
+    timeout = httpx_client.Timeout(10.0, connect=5.0)
+    started = time.perf_counter()
+
+    result: dict[str, Any] = {
+        "target": url,
+        "base_url": base_url,
+        "domain": domain,
+        "port_profile": _summarize_ports(open_ports),
+    }
+
+    async with httpx_client.AsyncClient(
+        timeout=timeout,
+        follow_redirects=True,
+        headers={"User-Agent": "ScanAI web intelligence"},
+    ) as client:
+        main_response = None
+        main_error = None
+        try:
+            main_response = await client.get(url)
+        except httpx_client.HTTPError as e:
+            main_error = str(e)[:240]
+
+        if main_response is not None:
+            headers = main_response.headers
+            parser = _WebMetadataParser(str(main_response.url))
+            content_type = headers.get("content-type", "").lower()
+            if "html" in content_type or "<html" in main_response.text[:500].lower():
+                try:
+                    parser.feed(main_response.text[:600_000])
+                except Exception as e:
+                    logger.debug(f"HTML metadata parsing failed for {url}: {e}")
+
+            origin_host = urlparse(str(main_response.url)).hostname
+            same_origin_links: list[str] = []
+            external_hosts: set[str] = set()
+            seen_links: set[str] = set()
+            for link in parser.links:
+                link_parsed = urlparse(link)
+                normalized = link_parsed._replace(fragment="").geturl()
+                if not normalized or normalized in seen_links or link_parsed.scheme not in {"http", "https"}:
+                    continue
+                seen_links.add(normalized)
+                if origin_host and link_parsed.hostname == origin_host:
+                    same_origin_links.append(normalized)
+                elif link_parsed.hostname:
+                    external_hosts.add(link_parsed.hostname)
+
+            fingerprint_headers = {
+                name: value[:300]
+                for name in FINGERPRINT_HEADERS
+                if (value := _header_value(headers, name))
+            }
+            cookies = []
+            for cookie in main_response.cookies.jar:
+                cookies.append(
+                    {
+                        "name": cookie.name,
+                        "domain": cookie.domain,
+                        "secure": bool(cookie.secure),
+                        "http_only": bool(cookie.has_nonstandard_attr("HttpOnly") or cookie.has_nonstandard_attr("httponly")),
+                        "same_site": cookie.get_nonstandard_attr("SameSite") or cookie.get_nonstandard_attr("samesite"),
+                    }
+                )
+
+            result["http"] = {
+                "final_url": str(main_response.url),
+                "status": main_response.status_code,
+                "method": main_response.request.method,
+                "redirect_chain": [
+                    {
+                        "status": response.status_code,
+                        "url": str(response.url),
+                        "location": response.headers.get("location"),
+                    }
+                    for response in main_response.history
+                ],
+                "response_time_ms": round((time.perf_counter() - started) * 1000),
+                "content_type": headers.get("content-type"),
+                "content_length": headers.get("content-length"),
+                "server_fingerprints": fingerprint_headers,
+                "cookies": cookies[:30],
+                "cookie_summary": {
+                    "count": len(cookies),
+                    "missing_secure": [cookie["name"] for cookie in cookies if not cookie["secure"]][:20],
+                    "missing_http_only": [cookie["name"] for cookie in cookies if not cookie["http_only"]][:20],
+                },
+                "security_headers": _analyze_security_headers(str(main_response.url), headers),
+            }
+            result["page"] = {
+                "title": parser.title,
+                "social_tags": parser.meta,
+                "same_origin_links": same_origin_links[:40],
+                "external_hosts": sorted(external_hosts)[:40],
+                "scripts": parser.scripts[:30],
+                "forms": parser.forms[:20],
+                "features": parser.features,
+            }
+        else:
+            result["http"] = {"error": main_error or "Unable to fetch target"}
+
+        robots_url = urljoin(base_url, "robots.txt")
+        sitemap_url = urljoin(base_url, "sitemap.xml")
+        security_txt_urls = [
+            urljoin(base_url, ".well-known/security.txt"),
+            urljoin(base_url, "security.txt"),
+        ]
+        robots, sitemap, security_well_known, security_root, dnssec, mail = await asyncio.gather(
+            _fetch_text_resource(client, robots_url),
+            _fetch_text_resource(client, sitemap_url),
+            _fetch_text_resource(client, security_txt_urls[0]),
+            _fetch_text_resource(client, security_txt_urls[1]),
+            _dnssec_status(domain),
+            _mail_policy_status(domain),
+        )
+
+    result["crawl_rules"] = {
+        "robots": _summarize_robots(robots),
+        "sitemap": _summarize_sitemap(sitemap),
+        "security_txt": _summarize_security_txt(security_well_known if security_well_known.get("available") else security_root),
+    }
+    result["dnssec"] = dnssec
+    result["mail_security"] = mail
+    result["elapsed_ms"] = round((time.perf_counter() - started) * 1000)
+    logger.info(f"web enrichment completed for {url} in {result['elapsed_ms']}ms")
+    return result
+
+
+async def run_webanalyze(url: str, scan_id: str) -> list[dict[str, Any]]:
+    """
+    Wappalyzer-style technology fingerprinting with webanalyze.
+
+    httpx already performs lightweight tech detection. webanalyze adds a broader
+    app-definition database, so the AI report can correlate findings with exposed
+    frameworks/CMS/CDN/client libraries.
+    """
+    _ensure_output_dir()
+    output_file = _output_path(scan_id, "webanalyze")
+    apps_file = "/opt/webanalyze/technologies.json"
+    cmd = [
+        "webanalyze",
+        "-host", url,
+        "-output", "json",
+        "-silent",
+        "-worker", "2",
+    ]
+    if os.path.exists(apps_file):
+        cmd.extend(["-apps", apps_file])
+
+    try:
+        stdout, stderr, returncode = await _run_subprocess(
+            cmd,
+            timeout=max(20, min(settings.TOOL_TIMEOUT_SECONDS, 60)),
+        )
+    except FileNotFoundError:
+        logger.info("webanalyze is not installed; skipping technology fingerprinting")
+        return []
+
+    if returncode != 0:
+        logger.warning(f"webanalyze returned code {returncode}: {stderr[:500]}")
+
+    data: Any
+    try:
+        data = json.loads(stdout) if stdout.strip() else []
+    except json.JSONDecodeError:
+        logger.warning(f"webanalyze returned invalid JSON: {stdout[:300]}")
+        data = []
+
+    with open(output_file, "w") as f:
+        json.dump(data, f)
+
+    technologies = _normalize_technology_items(data)
+    logger.info(f"webanalyze identified {len(technologies)} technologies for {url}")
+    return technologies
+
+
+async def run_wafw00f(url: str, scan_id: str) -> dict[str, Any]:
+    """
+    WAF/security edge fingerprinting with WAFW00F.
+
+    Runs as a bounded best-effort probe. If the binary is not installed, the
+    pipeline skips it without failing the scan.
+    """
+    _ensure_output_dir()
+    output_file = _output_path(scan_id, "wafw00f")
+    cmd = [
+        "wafw00f",
+        url,
+        "-o", output_file,
+        "-f", "json",
+    ]
+
+    try:
+        stdout, stderr, returncode = await _run_subprocess(
+            cmd,
+            timeout=max(20, min(settings.TOOL_TIMEOUT_SECONDS, 45)),
+        )
+    except FileNotFoundError:
+        logger.info("wafw00f is not installed; skipping WAF fingerprinting")
+        return {"detected": False, "skipped": True, "reason": "wafw00f not installed"}
+
+    if returncode != 0:
+        logger.warning(f"wafw00f returned code {returncode}: {stderr[:500]}")
+        if not os.path.exists(output_file):
+            fallback_cmd = ["wafw00f", url, "-o", output_file]
+            try:
+                stdout, stderr, returncode = await _run_subprocess(
+                    fallback_cmd,
+                    timeout=max(20, min(settings.TOOL_TIMEOUT_SECONDS, 45)),
+                )
+            except FileNotFoundError:
+                return {"detected": False, "skipped": True, "reason": "wafw00f not installed"}
+            if returncode != 0:
+                logger.warning(f"wafw00f fallback returned code {returncode}: {stderr[:500]}")
+
+    data = _parse_json_file(output_file)
+    result = _parse_wafw00f_output(stdout, data)
+    logger.info(f"wafw00f completed for {url}: detected={result.get('detected')}")
+    return result
+
+
 async def run_testssl(url: str, scan_id: str) -> Any:
     """
-    Step 6: Deep TLS/SSL analysis.
+    Step 6: Focused TLS/SSL analysis.
 
-    Checks for weak ciphers, expired certs, HSTS, HEARTBLEED, etc.
+    Checks certificate/defaults, protocol support, server preference, HTTP TLS
+    headers, and known TLS vulnerabilities without doing exhaustive cipher
+    enumeration. Broad certificate inventory is handled by tlsx.
     Output: JSON array with TLS analysis results.
     """
+    if not settings.TLS_DEEP_SCAN_ENABLED:
+        logger.info("testssl skipped because TLS_DEEP_SCAN_ENABLED=false")
+        return {"skipped": True, "reason": "TLS deep scan disabled"}
+
     _ensure_output_dir()
     output_file = _output_path(scan_id, "tls")
 
@@ -825,6 +1481,10 @@ async def run_testssl(url: str, scan_id: str) -> Any:
     parsed = urlparse(url)
     host = parsed.hostname or ""
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    if parsed.scheme != "https" and port not in COMMON_TLS_PORTS:
+        logger.info(f"testssl skipped for non-TLS target {url}")
+        return {"skipped": True, "reason": "Target URL is not HTTPS or a known TLS port"}
+
     target = f"{host}:{port}"
 
     cmd = [
@@ -832,10 +1492,21 @@ async def run_testssl(url: str, scan_id: str) -> Any:
         "--jsonfile", output_file,
         "--quiet",
         "--fast",
+        "--parallel",
+        "--ip", "one",
+        "--warnings", "off",
+        "-S",
+        "-p",
+        "-P",
+        "-U",
+        "-H",
         target,
     ]
 
-    stdout, stderr, returncode = await _run_subprocess(cmd)
+    stdout, stderr, returncode = await _run_subprocess(
+        cmd,
+        timeout=max(20, min(settings.TLS_DEEP_SCAN_TIMEOUT_SECONDS, settings.TOOL_TIMEOUT_SECONDS)),
+    )
 
     if returncode != 0:
         logger.warning(f"testssl returned code {returncode}: {stderr[:500]}")
@@ -914,7 +1585,7 @@ async def run_dalfox(url: str, scan_id: str, crawled_endpoints: list[dict[str, A
 
 def cleanup_scan_files(scan_id: str) -> None:
     """Remove temporary output files for a completed scan."""
-    suffixes = ["subs", "dnsx", "httpx", "ports", "crawl", "nuclei", "nuclei_api", "ffuf_api", "tls", "tlsx", "dalfox", "api_words"]
+    suffixes = ["subs", "dnsx", "httpx", "ports", "crawl", "nuclei", "nuclei_api", "ffuf_api", "tls", "tlsx", "dalfox", "webanalyze", "wafw00f", "api_words"]
     for suffix in suffixes:
         filepath = _text_output_path(scan_id, suffix) if suffix == "api_words" else _output_path(scan_id, suffix)
         try:

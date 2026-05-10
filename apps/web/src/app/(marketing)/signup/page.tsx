@@ -16,21 +16,29 @@ import {
   UserRound,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { requestSignupOtp } from "@/lib/api";
+import { GoogleAuthLink } from "@/components/google-auth-link";
 
 export default function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { signup } = useAuth();
   const router = useRouter();
 
+  const browserTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
@@ -44,7 +52,19 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      await signup(name, email, password);
+      if (!otpSent) {
+        await requestSignupOtp(name, email, password, browserTimezone());
+        setOtpSent(true);
+        setNotice("Verification code sent. Check your email to finish signup.");
+        return;
+      }
+
+      if (!otp.trim()) {
+        setError("Enter the verification code sent to your email.");
+        return;
+      }
+
+      await signup(name, email, password, otp, browserTimezone());
       router.push("/dashboard");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Signup failed.";
@@ -98,8 +118,17 @@ export default function SignupPage() {
               Create account.
             </h1>
             <p className="mt-4 max-w-md text-sm leading-6 text-zinc-600">
-              Set up access to your ScanAI command desk.
+              Start instantly with Google, or create credentials for your ScanAI command desk.
             </p>
+
+            <div className="mt-7 space-y-5">
+              <GoogleAuthLink label="Sign up with Google" />
+              <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                <span className="h-px flex-1 bg-black/10" />
+                <span>or use email</span>
+                <span className="h-px flex-1 bg-black/10" />
+              </div>
+            </div>
 
             <form onSubmit={handleSubmit} className="mt-7 space-y-4">
               <div>
@@ -137,7 +166,11 @@ export default function SignupPage() {
                     type="email"
                     placeholder="you@example.com"
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setOtpSent(false);
+                      setOtp("");
+                    }}
                     required
                     disabled={loading}
                     autoComplete="email"
@@ -200,6 +233,38 @@ export default function SignupPage() {
                 </div>
               </div>
 
+              {otpSent && (
+                <div>
+                  <label htmlFor="signup-otp" className="mb-2 block text-sm font-semibold text-zinc-800">
+                    Verification code
+                  </label>
+                  <div className="flex h-12 items-center gap-3 rounded-[4px] border border-black/14 bg-[#f7f6f1] px-3 transition-colors focus-within:border-[#4fa5b6]/70 focus-within:ring-4 focus-within:ring-[#4fa5b6]/15">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[3px] bg-white text-zinc-500 shadow-[inset_0_0_0_1px_rgba(20,20,19,0.08)]">
+                      <ShieldCheck className="h-4 w-4" />
+                    </span>
+                    <input
+                      id="signup-otp"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="6-digit code"
+                      value={otp}
+                      onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      required
+                      disabled={loading}
+                      autoComplete="one-time-code"
+                      className="login-input h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-zinc-950 outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {notice && (
+                <div className="flex items-start gap-2 rounded-[4px] border border-[#4fa5b6]/25 bg-[#effbfc] p-3 text-sm text-[#176b78]">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{notice}</span>
+                </div>
+              )}
+
               {error && (
                 <div className="flex items-start gap-2 rounded-[4px] border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -213,7 +278,7 @@ export default function SignupPage() {
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[4px] bg-[#0a0a09] text-sm font-semibold text-white transition-colors hover:bg-[#1d1d1b] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={loading}
               >
-                {loading ? "Creating account..." : "Create account"}
+                {loading ? (otpSent ? "Creating account..." : "Sending code...") : otpSent ? "Verify and create account" : "Send verification code"}
                 <ArrowRight className="h-4 w-4" />
               </button>
             </form>

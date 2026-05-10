@@ -10,6 +10,7 @@ WORKDIR /app
 COPY package.json package-lock.json* turbo.json ./
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/admin/package.json ./apps/admin/package.json
+COPY apps/scheduler/package.json ./apps/scheduler/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 RUN npm ci
 

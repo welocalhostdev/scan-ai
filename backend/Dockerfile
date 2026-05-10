@@ -41,7 +41,13 @@ RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest && 
     go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest && \
     go install github.com/projectdiscovery/tlsx/cmd/tlsx@latest && \
     go install github.com/projectdiscovery/katana/cmd/katana@latest && \
-    go install github.com/ffuf/ffuf/v2@latest
+    go install github.com/ffuf/ffuf/v2@latest && \
+    go install github.com/rverton/webanalyze/cmd/webanalyze@latest
+
+# Seed webanalyze's Wappalyzer-style technology database for fast runtime scans
+RUN mkdir -p /opt/webanalyze && \
+    cd /opt/webanalyze && \
+    webanalyze -update
 
 # Install API parameter discovery tooling
 RUN pip install --no-cache-dir arjun==2.2.7

@@ -33,7 +33,7 @@ const PRIMARY_NAV = [
 ];
 
 const PRIMARY_VIEWS = ["surface", "findings", "reports", "agents"];
-const UTILITY_PANELS = ["activity", "radar", "notifications", "settings", "account", "search"];
+const UTILITY_PANELS = ["activity", "radar", "notifications", "account", "search"];
 const DASHBOARD_THEME_KEY = "scanai-dashboard-theme";
 
 function UtilityDrawer({
@@ -53,7 +53,6 @@ function UtilityDrawer({
     activity: "Live activity",
     radar: "API radar",
     notifications: "Notifications",
-    settings: "Settings",
     account: "Account",
     search: "Command search",
   }[panel];
@@ -93,13 +92,7 @@ function UtilityDrawer({
             </div>
           )}
 
-          {panel === "settings" && (
-            <div className="rounded-[4px] border border-white/10 bg-black/20 p-4 text-sm leading-6 text-zinc-400">
-              Dashboard-specific display and workflow settings are available from the dashboard. This drawer stays attached to the current page so reports and scans do not lose context.
-            </div>
-          )}
-
-          {panel !== "account" && panel !== "settings" && (
+          {panel !== "account" && (
             <div className="rounded-[4px] border border-white/10 bg-black/20 p-4 text-sm leading-6 text-zinc-400">
               Open the dashboard for the full {title?.toLowerCase()} workspace. This quick drawer keeps you on the current page.
             </div>
@@ -122,6 +115,7 @@ export function AppHeader() {
   const utilityView = PRIMARY_VIEWS.includes(viewParam || "") ? viewParam : null;
 
   const utilityHref = (panel: string) => {
+    if (panel === "settings") return "/settings";
     if (pathname !== "/dashboard") {
       const params = new URLSearchParams(searchParams.toString());
       params.set("panel", panel);
@@ -259,15 +253,15 @@ export function AppHeader() {
             <Bell className="h-4 w-4" />
           </Link>
           <Link
-            href={utilityHref("settings")}
+            href="/settings"
             className={cn(
               "hidden h-full w-14 items-center justify-center border-l border-white/10 transition-colors sm:flex",
-              activePanel === "settings"
+              pathname === "/settings"
                 ? "bg-white/[0.09] text-zinc-100"
                 : "text-zinc-400 hover:bg-white/[0.055] hover:text-zinc-100"
             )}
             title="Settings"
-            aria-current={activePanel === "settings" ? "page" : undefined}
+            aria-current={pathname === "/settings" ? "page" : undefined}
           >
             <Settings className="h-4 w-4" />
           </Link>

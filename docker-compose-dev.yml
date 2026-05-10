@@ -48,6 +48,9 @@ services:
     environment:
       DATABASE_URL: postgresql://scanai:scanai@db:5432/scanai
       REDIS_URL: redis://redis:6379/0
+      SCHEDULER_TOKEN: ${SCHEDULER_TOKEN:-scanai-scheduler-dev}
+      SCAN_QUEUE_BACKEND: ${SCAN_QUEUE_BACKEND:-bullmq}
+      SCAN_PIPELINE_PARALLELISM: ${SCAN_PIPELINE_PARALLELISM:-4}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: scanai
       MINIO_SECRET_KEY: scanai-secret-key
@@ -77,6 +80,8 @@ services:
     environment:
       DATABASE_URL: postgresql://scanai:scanai@db:5432/scanai
       REDIS_URL: redis://redis:6379/0
+      SCHEDULER_TOKEN: ${SCHEDULER_TOKEN:-scanai-scheduler-dev}
+      SCAN_PIPELINE_PARALLELISM: ${SCAN_PIPELINE_PARALLELISM:-4}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: scanai
       MINIO_SECRET_KEY: scanai-secret-key
@@ -101,6 +106,44 @@ services:
     cap_add:
       - NET_RAW
       - NET_ADMIN
+
+  # ── BullMQ Scheduled Scans + Email Dispatch (hot-reload) ──
+  scheduler:
+    build:
+      context: .
+      dockerfile: apps/scheduler/Dockerfile
+      target: deps
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      SCHEDULER_API_URL: http://api:8000
+      SCHEDULER_TOKEN: ${SCHEDULER_TOKEN:-scanai-scheduler-dev}
+      SCHEDULER_SYNC_INTERVAL_MS: 5000
+      SCHEDULER_API_STARTUP_TIMEOUT_MS: 120000
+      SCHEDULER_API_RETRY_DELAY_MS: 3000
+      SCAN_DISPATCH_SYNC_INTERVAL_MS: ${SCAN_DISPATCH_SYNC_INTERVAL_MS:-3000}
+      SCAN_DISPATCH_CONCURRENCY: ${SCAN_DISPATCH_CONCURRENCY:-2}
+      SCAN_DISPATCH_RATE_LIMIT_MAX: ${SCAN_DISPATCH_RATE_LIMIT_MAX:-4}
+      SCAN_DISPATCH_RATE_LIMIT_DURATION_MS: ${SCAN_DISPATCH_RATE_LIMIT_DURATION_MS:-60000}
+      EMAIL_SYNC_INTERVAL_MS: 5000
+      EMAIL_RATE_LIMIT_MAX: ${EMAIL_RATE_LIMIT_MAX:-10}
+      EMAIL_RATE_LIMIT_DURATION_MS: ${EMAIL_RATE_LIMIT_DURATION_MS:-60000}
+      EMAIL_CONCURRENCY: ${EMAIL_CONCURRENCY:-1}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    command: npm run dev --workspace=@scanai/scheduler
 
   # ── Web App (Next.js dev server with hot-reload) ──
   frontend:

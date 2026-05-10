@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   TerminalSquare,
 } from "lucide-react";
+import { GoogleAuthLink } from "@/components/google-auth-link";
 
 const trustSignals = ["External scans", "API discovery", "Risk reports", "AI triage", "Fix prompts"];
 
@@ -288,10 +289,13 @@ export default function LandingPage() {
             <p className="mt-8 max-w-3xl text-lg leading-8 text-white/84 md:text-xl">
               ScanAI maps reachable assets, detects exposed services and API risks, then turns findings into clear remediation reports for engineering teams.
             </p>
-            <Link href="/signup" className="mt-10 inline-flex h-14 items-center bg-white px-8 text-base font-medium text-black transition-colors hover:bg-zinc-200">
-              Start scanning
-              <span className="ml-7 text-2xl leading-none">»</span>
-            </Link>
+            <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link href="/signup" className="inline-flex h-14 items-center justify-center bg-white px-8 text-base font-medium text-black transition-colors hover:bg-zinc-200">
+                Start scanning
+                <span className="ml-7 text-2xl leading-none">»</span>
+              </Link>
+              <GoogleAuthLink variant="dark" label="Continue with Google" className="h-14" />
+            </div>
             <p className="mt-28 text-base text-white/80">Built for teams that need external security visibility without manual scanner cleanup</p>
           </div>
         </div>

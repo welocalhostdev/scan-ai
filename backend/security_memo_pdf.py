@@ -2,6 +2,7 @@
 ScanAI Security Memo PDF generator.
 
 Revamped for robust layout safety:
+- Strict A4 portrait output for print-ready reports
 - Strict text measurement + wrapping with ellipsis
 - Conservative typography and spacing
 - Cleaner chart geometry
@@ -13,15 +14,16 @@ from __future__ import annotations
 from typing import Iterable
 
 from reportlab.lib.colors import Color, HexColor
+from reportlab.lib.pagesizes import A4, portrait
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfgen.canvas import Canvas
 
-PAGE_W = 390
-PAGE_H = 844
-MARGIN_X = 28
-MARGIN_TOP = 36
-MARGIN_BOTTOM = 28
-GUTTER = 16
+PAGE_SIZE = portrait(A4)
+PAGE_W, PAGE_H = PAGE_SIZE
+MARGIN_X = 40
+MARGIN_TOP = 42
+MARGIN_BOTTOM = 36
+GUTTER = 20
 
 PAGE_BG = HexColor("#FFFFFF")
 CARD_BG = HexColor("#FFFFFF")

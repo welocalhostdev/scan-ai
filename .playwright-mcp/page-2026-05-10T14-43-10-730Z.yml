@@ -1,0 +1,188 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "ScanAI Command desk" [ref=e5] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e6]:
+            - paragraph [ref=e7]: ScanAI
+            - paragraph [ref=e8]: Command desk
+        - navigation "Primary" [ref=e9]:
+          - link "Dashboard" [ref=e10] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e11]
+            - text: Dashboard
+          - link "Surface" [ref=e14] [cursor=pointer]:
+            - /url: /dashboard?view=surface
+            - img [ref=e15]
+            - text: Surface
+          - link "Findings" [ref=e25] [cursor=pointer]:
+            - /url: /dashboard?view=findings
+            - img [ref=e26]
+            - text: Findings
+          - link "Reports" [ref=e28] [cursor=pointer]:
+            - /url: /dashboard?view=reports
+            - img [ref=e29]
+            - text: Reports
+          - link "Agents" [ref=e32] [cursor=pointer]:
+            - /url: /dashboard?view=agents
+            - img [ref=e33]
+            - text: Agents
+        - generic [ref=e36]:
+          - link "Live activity" [ref=e37] [cursor=pointer]:
+            - /url: /dashboard?panel=activity
+            - img [ref=e38]
+          - link "API radar" [ref=e40] [cursor=pointer]:
+            - /url: /dashboard?panel=radar
+            - img [ref=e41]
+          - link "Notifications" [ref=e48] [cursor=pointer]:
+            - /url: /dashboard?panel=notifications
+            - img [ref=e49]
+          - link "Settings" [ref=e52] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e53]
+          - link [ref=e56] [cursor=pointer]:
+            - /url: /dashboard?panel=account
+            - img [ref=e58]
+          - button "Log out" [ref=e61]:
+            - img [ref=e62]
+    - main [ref=e65]:
+      - generic [ref=e67]:
+        - generic [ref=e68]:
+          - generic [ref=e70]:
+            - generic [ref=e71]:
+              - img [ref=e72]
+              - text: Live external surface
+            - heading "Scan a target. Get the risk story." [level=1] [ref=e75]
+            - paragraph [ref=e76]: Welcome back, Operator. Start with a URL; the dashboard stays focused on posture, reports, and follow-up.
+            - generic [ref=e79]:
+              - generic [ref=e80]:
+                - img [ref=e82]
+                - textbox "Target URL" [ref=e85]:
+                  - /placeholder: https://app.example.com
+              - generic [ref=e86]:
+                - button "Run" [ref=e87]:
+                  - img [ref=e88]
+                  - text: Run
+                - button "Schedule" [ref=e90]:
+                  - img [ref=e91]
+                  - text: Schedule
+            - paragraph [ref=e93]: Crawl / triage / report
+          - generic [ref=e94]:
+            - generic [ref=e95]:
+              - generic [ref=e96]:
+                - heading "Average risk" [level=2] [ref=e97]
+                - paragraph [ref=e98]: Across completed reports
+              - img [ref=e99]
+            - generic [ref=e101]:
+              - img [ref=e102]
+              - paragraph [ref=e104]: No risk score yet
+              - paragraph [ref=e105]: Run a scan and wait for a completed report to calculate average risk.
+        - generic [ref=e106]:
+          - link "Open Total scans" [ref=e107] [cursor=pointer]:
+            - /url: /dashboard?view=scans
+            - generic [ref=e108]:
+              - img [ref=e110]
+              - generic [ref=e115]:
+                - paragraph [ref=e116]: "0"
+                - paragraph [ref=e117]: Total scans
+          - link "Open Findings" [ref=e120] [cursor=pointer]:
+            - /url: /dashboard?view=findings
+            - generic [ref=e121]:
+              - img [ref=e123]
+              - generic [ref=e127]:
+                - paragraph [ref=e128]: "0"
+                - paragraph [ref=e129]: Findings
+          - link "Open Active scans" [ref=e132] [cursor=pointer]:
+            - /url: /dashboard?view=scans&status=active
+            - generic [ref=e133]:
+              - img [ref=e135]
+              - generic [ref=e138]:
+                - paragraph [ref=e139]: "0"
+                - paragraph [ref=e140]: Active scans
+          - link "Open Reports ready" [ref=e143] [cursor=pointer]:
+            - /url: /dashboard?view=reports
+            - generic [ref=e144]:
+              - img [ref=e146]
+              - generic [ref=e150]:
+                - paragraph [ref=e151]: "0"
+                - paragraph [ref=e152]: Reports ready
+          - link "Open Failed scans" [ref=e155] [cursor=pointer]:
+            - /url: /dashboard?view=scans&status=failed
+            - generic [ref=e156]:
+              - img [ref=e158]
+              - generic [ref=e162]:
+                - paragraph [ref=e163]: "0"
+                - paragraph [ref=e164]: Failed scans
+        - generic [ref=e167]:
+          - generic [ref=e168]:
+            - generic [ref=e169]:
+              - generic [ref=e170]:
+                - heading "Scan trend" [level=2] [ref=e171]
+                - paragraph [ref=e172]: Real scans and retained findings by day
+              - img [ref=e173]
+            - generic [ref=e175]:
+              - img [ref=e176]
+              - paragraph [ref=e179]: No scan trend yet
+              - paragraph [ref=e180]: Run scans through make dev and this chart will reflect real scan and finding counts by day.
+          - generic [ref=e181]:
+            - generic [ref=e182]:
+              - heading "Finding severity" [level=2] [ref=e183]
+              - generic [ref=e184]: 0 total
+            - generic [ref=e185]:
+              - img [ref=e186]
+              - paragraph [ref=e189]: No retained findings
+              - paragraph [ref=e190]: Completed reports with findings will populate this severity breakdown.
+        - generic [ref=e191]:
+          - generic [ref=e192]:
+            - heading "Finding categories" [level=2] [ref=e193]
+            - generic [ref=e194]:
+              - img [ref=e195]
+              - paragraph [ref=e198]: No categories yet
+              - paragraph [ref=e199]: Categories are derived from completed report findings.
+          - generic [ref=e200]:
+            - heading "Top affected assets" [level=2] [ref=e201]
+            - generic [ref=e202]:
+              - img [ref=e203]
+              - paragraph [ref=e206]: No affected assets yet
+              - paragraph [ref=e207]: Affected assets are derived from the real findings inside completed reports.
+          - generic [ref=e208]:
+            - generic [ref=e209]:
+              - heading "Recent scans" [level=2] [ref=e210]
+              - generic [ref=e212]: 0 shown
+            - generic [ref=e213]:
+              - img [ref=e214]
+              - paragraph [ref=e217]: No scans yet
+              - paragraph [ref=e218]: Run a target scan to populate this command view.
+        - generic [ref=e220]:
+          - generic [ref=e221]:
+            - generic [ref=e222]:
+              - heading "Scheduled checkups" [level=2] [ref=e223]
+              - paragraph [ref=e224]: Set a regular scan cadence for targets that need ongoing watch.
+            - img [ref=e225]
+          - generic [ref=e229]:
+            - textbox "https://app.example.com" [ref=e230]
+            - combobox [ref=e231]:
+              - option "Hourly"
+              - option "Daily 9 AM" [selected]
+              - option "Weekly Monday"
+              - option "Monthly"
+              - option "Custom"
+            - textbox "UTC" [ref=e232]: Asia/Calcutta
+            - button "Schedule checkup" [ref=e233]:
+              - img [ref=e234]
+              - text: Schedule checkup
+          - textbox "Cron expression" [ref=e236]:
+            - /placeholder: 0 9 * * *
+            - text: 0 9 * * *
+          - generic [ref=e238]:
+            - paragraph [ref=e239]: No recurring scans
+            - paragraph [ref=e240]: Create a schedule and the BullMQ scheduler will trigger scans in the background.
+        - generic [ref=e243]:
+          - img [ref=e244]
+          - generic [ref=e247]:
+            - heading "This dashboard is waiting for real scan data." [level=2] [ref=e248]
+            - paragraph [ref=e249]: "Start your Docker dev stack with `make dev`, sign in, run a scan, and these panels will populate from Postgres reports."
+  - button "Open Next.js Dev Tools" [ref=e255] [cursor=pointer]:
+    - img [ref=e256]
+  - alert [ref=e259]
