@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     ACCOUNT_OTP_MAX_ATTEMPTS: int = 5
     IP_TIMEZONE_LOOKUP_ENABLED: bool = True
     IP_TIMEZONE_LOOKUP_TIMEOUT_SECONDS: float = 2.0
+    AUTH_PROFILE_ENCRYPTION_KEY: str = ""
 
     # SMTP for account security notifications
     SMTP_HOST: str = ""

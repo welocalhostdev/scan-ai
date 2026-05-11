@@ -1,17 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createScan } from "@/lib/api";
+import { createScan, listPrograms, type Program } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export function ScanInput() {
   const [url, setUrl] = useState("");
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    void listPrograms()
+      .then(setPrograms)
+      .catch(() => setPrograms([]));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,10 +34,14 @@ export function ScanInput() {
     if (!/^https?:\/\//i.test(scanUrl)) {
       scanUrl = `https://${scanUrl}`;
     }
+    if (!programs[0]) {
+      setError("Create a program first, then run the scan from that program.");
+      return;
+    }
 
     setLoading(true);
     try {
-      const { scan_id } = await createScan(scanUrl);
+      const { scan_id } = await createScan(scanUrl, programs[0].id);
       router.push(`/scan/${scan_id}`);
     } catch (err: unknown) {
       const message =
@@ -95,4 +106,3 @@ export function ScanInput() {
     </form>
   );
 }
-

@@ -91,6 +91,48 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function parseUtcOffset(timezone) {
+  if (!timezone || timezone === "UTC") return 0;
+  const match = String(timezone).match(/^UTC([+-])(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const sign = match[1] === "-" ? -1 : 1;
+  return sign * ((Number(match[2]) * 60) + Number(match[3]));
+}
+
+function offsetCronToUtc(pattern, offsetMinutes) {
+  const fields = String(pattern || "").trim().split(/\s+/);
+  if (fields.length !== 5 || offsetMinutes === null || offsetMinutes === 0) {
+    return pattern;
+  }
+
+  const [minuteField, hourField, dayField, monthField, weekdayField] = fields;
+  if (!/^\d+$/.test(minuteField) || !/^\d+$/.test(hourField)) {
+    return pattern;
+  }
+
+  const localMinute = Number(minuteField);
+  const localHour = Number(hourField);
+  if (localMinute > 59 || localHour > 23) {
+    return pattern;
+  }
+
+  const utcTotal = (((localHour * 60) + localMinute - offsetMinutes) % 1440 + 1440) % 1440;
+  const utcHour = Math.floor(utcTotal / 60);
+  const utcMinute = utcTotal % 60;
+  return `${utcMinute} ${utcHour} ${dayField} ${monthField} ${weekdayField}`;
+}
+
+function schedulerTimezoneConfig(schedule) {
+  const offsetMinutes = parseUtcOffset(schedule.timezone);
+  if (offsetMinutes === null) {
+    return { pattern: schedule.cron, tz: schedule.timezone };
+  }
+  return {
+    pattern: offsetCronToUtc(schedule.cron, offsetMinutes),
+    tz: "UTC",
+  };
+}
+
 async function apiFetch(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -169,24 +211,25 @@ async function syncSchedules() {
       .map((item) => scheduleQueue.removeJobScheduler(item.key))
   );
 
-  await Promise.all(
-    schedules.map((schedule) =>
-      scheduleQueue.upsertJobScheduler(
-        schedulerId(schedule.id),
-        {
-          pattern: schedule.cron,
-          tz: schedule.timezone,
+	  await Promise.all(
+	    schedules.map((schedule) => {
+	      const timezoneConfig = schedulerTimezoneConfig(schedule);
+	      return scheduleQueue.upsertJobScheduler(
+	        schedulerId(schedule.id),
+	        {
+	          pattern: timezoneConfig.pattern,
+          tz: timezoneConfig.tz,
         },
         {
           name: "trigger-scheduled-scan",
           data: {
             scheduleId: schedule.id,
             url: schedule.url,
-          },
-        }
-      )
-    )
-  );
+	          },
+	        }
+	      );
+	    })
+	  );
 
   console.log(`[scheduler] synced ${schedules.length} active schedule(s)`);
 }

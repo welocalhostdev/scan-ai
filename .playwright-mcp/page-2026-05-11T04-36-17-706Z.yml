@@ -1,0 +1,56 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "ScanAI Command desk" [ref=e5] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e6]:
+            - paragraph [ref=e7]: ScanAI
+            - paragraph [ref=e8]: Command desk
+        - navigation "Primary" [ref=e9]:
+          - link "Dashboard" [ref=e10] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e11]
+            - text: Dashboard
+          - link "Surface" [ref=e14] [cursor=pointer]:
+            - /url: /dashboard?view=surface
+            - img [ref=e15]
+            - text: Surface
+          - link "Programs" [ref=e25] [cursor=pointer]:
+            - /url: /dashboard?view=programs
+            - img [ref=e26]
+            - text: Programs
+          - link "Findings" [ref=e29] [cursor=pointer]:
+            - /url: /dashboard?view=findings
+            - img [ref=e30]
+            - text: Findings
+          - link "Reports" [ref=e32] [cursor=pointer]:
+            - /url: /dashboard?view=reports
+            - img [ref=e33]
+            - text: Reports
+        - generic [ref=e36]:
+          - link "Live activity" [ref=e37] [cursor=pointer]:
+            - /url: /dashboard?panel=activity
+            - img [ref=e38]
+          - link "API radar" [ref=e40] [cursor=pointer]:
+            - /url: /dashboard?panel=radar
+            - img [ref=e41]
+          - link "Notifications" [ref=e48] [cursor=pointer]:
+            - /url: /dashboard?panel=notifications
+            - img [ref=e49]
+          - link "Settings" [ref=e52] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e53]
+          - link "H Himanshu himanshudubey2401@gmail.com" [ref=e56] [cursor=pointer]:
+            - /url: /dashboard?panel=account
+            - generic [ref=e58]: H
+            - generic [ref=e59]:
+              - paragraph [ref=e60]: Himanshu
+              - paragraph [ref=e61]: himanshudubey2401@gmail.com
+            - img [ref=e62]
+          - button "Log out" [ref=e64]:
+            - img [ref=e65]
+    - main [ref=e68]
+  - button "Open Next.js Dev Tools" [ref=e84] [cursor=pointer]:
+    - img [ref=e85]
+  - alert [ref=e88]

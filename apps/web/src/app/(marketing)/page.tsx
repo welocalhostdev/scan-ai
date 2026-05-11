@@ -282,17 +282,17 @@ export default function LandingPage() {
       <section className="relative min-h-[780px] overflow-hidden pt-[76px] text-white">
         <HeroVisual />
         <div className="relative z-10 flex min-h-[704px] flex-col justify-center px-6 py-16 md:px-14">
-          <div className="max-w-[1680px]">
-            <h1 className="max-w-6xl text-6xl font-semibold leading-none md:text-7xl xl:text-8xl">
+          <div className="min-w-0 max-w-[1680px]">
+            <h1 className="max-w-6xl break-words text-5xl font-semibold leading-[0.95] sm:text-6xl md:text-7xl xl:text-8xl">
               Scan your attack surface. Ship fixes faster.
             </h1>
             <p className="mt-8 max-w-3xl text-lg leading-8 text-white/84 md:text-xl">
               ScanAI maps reachable assets, detects exposed services and API risks, then turns findings into clear remediation reports for engineering teams.
             </p>
-            <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Link href="/signup" className="inline-flex h-14 items-center justify-center bg-white px-8 text-base font-medium text-black transition-colors hover:bg-zinc-200">
+            <div className="mt-10 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+              <Link href="/signup" className="inline-flex min-h-14 max-w-full items-center justify-center gap-3 whitespace-nowrap bg-white px-5 text-base font-medium leading-none text-black transition-colors hover:bg-zinc-200 sm:px-8">
                 Start scanning
-                <span className="ml-7 text-2xl leading-none">»</span>
+                <span className="shrink-0 text-2xl leading-none">»</span>
               </Link>
               <GoogleAuthLink variant="dark" label="Continue with Google" className="h-14" />
             </div>
@@ -338,9 +338,9 @@ export default function LandingPage() {
           <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/76">
             ScanAI runs reconnaissance, probes reachable services, groups evidence, and produces engineering-ready remediation guidance.
           </p>
-          <Link href="/signup" className="mt-10 inline-flex h-14 items-center bg-white px-8 text-base font-medium text-black transition-colors hover:bg-zinc-200">
+          <Link href="/signup" className="mt-10 inline-flex min-h-14 max-w-full items-center justify-center gap-3 whitespace-nowrap bg-white px-5 text-base font-medium leading-none text-black transition-colors hover:bg-zinc-200 sm:px-8">
             Start scanning
-            <span className="ml-7 text-2xl leading-none">»</span>
+            <span className="shrink-0 text-2xl leading-none">»</span>
           </Link>
         </div>
       </section>
@@ -473,7 +473,7 @@ export default function LandingPage() {
             <p className="mt-8 text-lg leading-8 text-white/62">
               Get prioritized issues, affected assets, and engineer-ready fixes in one workspace.
             </p>
-            <Link href="/signup" className="mt-24 flex h-16 items-center justify-center bg-[#ef5126] px-8 text-lg font-medium text-white transition-colors hover:bg-[#db431c]">
+            <Link href="/signup" className="mt-24 flex min-h-16 max-w-full items-center justify-center whitespace-nowrap bg-[#ef5126] px-5 text-center text-lg font-medium leading-none text-white transition-colors hover:bg-[#db431c] sm:px-8">
               Start scanning today
             </Link>
           </div>

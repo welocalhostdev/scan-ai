@@ -10,11 +10,13 @@ import {
   BarChart3,
   Ban,
   Bell,
-  Bot,
   Boxes,
+  Bug,
   CalendarClock,
   CalendarPlus,
   CheckCircle2,
+  CircleHelp,
+  ClipboardList,
   Clock3,
   Download,
   FileText,
@@ -22,13 +24,11 @@ import {
   Layers3,
   Play,
   Radar,
-  RefreshCw,
   Search,
   Settings,
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   Target,
   TerminalSquare,
   Trash2,
@@ -39,25 +39,44 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import {
   cancelScan,
+  createAuthProfile,
+  createProgram,
+  createProgramScopeRule,
   createScanTarget,
   createSchedule,
   createScan,
+  deleteAuthProfile,
   deleteSchedule,
   getAccountUsage,
+  getProgramReleaseGate,
   getScanDashboard,
   getScanEventsWebSocketUrl,
+  listAssets,
+  listAuthProfiles,
+  listFindings,
+  listProgramScope,
+  listPrograms,
   listScanTargets,
   listSchedules,
+  previewProgramScope,
+  updateFindingStatus,
   updateSchedule,
   verifyScanTarget,
   type AccountUsage,
+  type AuthProfile,
   type DashboardCategoryCount,
   type DashboardDayCount,
   type DashboardRecentScan,
+  type Asset,
+  type PersistentFinding,
+  type Program,
+  type ReleaseGate,
   type ScheduledScan,
   type ScanTarget,
   type ScanEventMessage,
   type ScanDashboardResponse,
+  type ScopePreview,
+  type ScopeRule,
 } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -396,17 +415,26 @@ function RiskGauge({ value }: { value: number | null }) {
 function QuickScanForm({
   onCreated,
   onSchedule,
+  programs = [],
+  authProfilesByProgram = {},
   variant = "default",
 }: {
   onCreated: () => void;
   onSchedule?: (target: string) => void;
+  programs?: Program[];
+  authProfilesByProgram?: Record<string, AuthProfile[]>;
   variant?: "default" | "hero";
 }) {
   const [url, setUrl] = useState("");
+  const [programId, setProgramId] = useState("");
+  const [authProfileId, setAuthProfileId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const heroVariant = variant === "hero";
+  const selectedProgramId = programs.some((program) => program.id === programId) ? programId : programs[0]?.id || "";
+  const authProfiles = selectedProgramId ? authProfilesByProgram[selectedProgramId] || [] : [];
+  const selectedAuthProfileId = authProfiles.some((profile) => profile.id === authProfileId) ? authProfileId : "";
 
   const normalizedUrl = (value: string) => {
     const trimmed = value.trim();
@@ -421,13 +449,17 @@ function QuickScanForm({
       setError("Enter a target URL.");
       return;
     }
+    if (!selectedProgramId) {
+      setError("Create or select a program before running a scan.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
       const scanUrl = normalizedUrl(trimmed);
-      const { scan_id } = await createScan(scanUrl);
+      const { scan_id } = await createScan(scanUrl, selectedProgramId, selectedAuthProfileId || null);
       onCreated();
       router.push(`/scan/${scan_id}`);
     } catch (err) {
@@ -461,10 +493,57 @@ function QuickScanForm({
             aria-label="Target URL"
           />
         </div>
+        {programs.length > 0 ? (
+          <select
+            value={selectedProgramId}
+            onChange={(event) => {
+              setProgramId(event.target.value);
+              setAuthProfileId("");
+            }}
+            disabled={loading}
+            className={cn(
+              "h-10 min-w-44 rounded-[3px] border border-white/10 bg-black/24 px-3 text-sm outline-none focus:border-[#4fa5b6]/60",
+              heroVariant ? "text-white" : "text-zinc-100"
+            )}
+            aria-label="Bug bounty program"
+          >
+            {programs.map((program) => (
+              <option key={program.id} value={program.id}>
+                {program.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Link
+            href="/dashboard?view=programs"
+            className="inline-flex h-10 min-w-44 items-center justify-center rounded-[3px] border border-[#4fa5b6]/30 bg-[#4fa5b6]/10 px-3 text-sm font-semibold text-[#d9f7ff] transition-colors hover:bg-[#4fa5b6]/15"
+          >
+            Create program
+          </Link>
+        )}
+        {authProfiles.length > 0 && (
+          <select
+            value={selectedAuthProfileId}
+            onChange={(event) => setAuthProfileId(event.target.value)}
+            disabled={loading}
+            className={cn(
+              "h-10 min-w-44 rounded-[3px] border border-white/10 bg-black/24 px-3 text-sm outline-none focus:border-[#4fa5b6]/60",
+              heroVariant ? "text-white" : "text-zinc-100"
+            )}
+            aria-label="Auth profile"
+          >
+            <option value="">Unauthenticated</option>
+            {authProfiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.name}
+              </option>
+            ))}
+          </select>
+        )}
         <div className="flex shrink-0 gap-2">
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !selectedProgramId}
             className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-[3px] bg-white px-5 text-sm font-semibold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
           >
             <Play className="h-4 w-4" />
@@ -552,22 +631,20 @@ function scanStatusClass(status: DashboardRecentScan["status"]) {
 
 type ViewId =
   | "surface"
+  | "programs"
   | "scans"
   | "findings"
-  | "reports"
-  | "agents";
+  | "reports";
 
 type ScanFilter = "all" | "active" | "failed" | "complete";
 
 type PanelId =
-  | "activity"
-  | "radar"
   | "notifications"
   | "settings"
   | "search"
   | "account";
 
-const VIEW_IDS: ViewId[] = ["surface", "scans", "findings", "reports", "agents"];
+const VIEW_IDS: ViewId[] = ["surface", "programs", "scans", "findings", "reports"];
 const SCAN_FILTERS: ScanFilter[] = ["all", "active", "failed", "complete"];
 
 const SCHEDULE_PRESETS = [
@@ -577,9 +654,36 @@ const SCHEDULE_PRESETS = [
   { label: "Monthly", cron: "0 9 1 * *" },
 ];
 
+const FINDING_STATUSES: Array<PersistentFinding["status"]> = [
+  "new",
+  "triaged",
+  "accepted",
+  "duplicate",
+  "false_positive",
+  "fixed",
+  "regressed",
+];
+
+type AuthProfileMode = "cookie" | "bearer" | "basic" | "header";
+
+function inferScopeAssetType(value: string): ScopeRule["asset_type"] {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("/")) return "path";
+  if (/^https?:\/\//i.test(trimmed)) return "url";
+  if (trimmed.includes("*")) return "wildcard";
+  if (trimmed.includes("/")) return "cidr";
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(trimmed)) return "ip";
+  return "domain";
+}
+
+function defaultAuthProfileName(mode: AuthProfileMode) {
+  if (mode === "cookie") return "Cookie session";
+  if (mode === "bearer") return "Bearer token";
+  if (mode === "basic") return "Basic credentials";
+  return "Custom header";
+}
+
 const PANEL_TITLES: Record<PanelId, { title: string; eyebrow: string; icon: React.ElementType }> = {
-  activity: { title: "Live Activity", eyebrow: "Recent scan events", icon: Activity },
-  radar: { title: "API Radar", eyebrow: "Routes and signals", icon: Radar },
   notifications: { title: "Notifications", eyebrow: "Attention queue", icon: Bell },
   settings: { title: "Settings", eyebrow: "Workspace preferences", icon: Settings },
   search: { title: "Command Search", eyebrow: "Find scans and assets", icon: Search },
@@ -846,8 +950,10 @@ function ScheduleManager({
     if (focusSignal === undefined || lastFocusSignalRef.current === focusSignal) return;
     lastFocusSignalRef.current = focusSignal;
     const nextUrl = normalizeScheduleUrl(prefillUrl || "");
-    if (nextUrl) setUrl(nextUrl);
-    window.setTimeout(() => urlInputRef.current?.focus(), 220);
+    window.setTimeout(() => {
+      if (nextUrl) setUrl(nextUrl);
+      urlInputRef.current?.focus();
+    }, 220);
   }, [focusSignal, prefillUrl]);
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -998,7 +1104,6 @@ function DashboardPanelDrawer({
   theme,
   onThemeChange,
   onClose,
-  onRefresh,
   onTargetsChanged,
 }: {
   panel: PanelId | null;
@@ -1009,7 +1114,6 @@ function DashboardPanelDrawer({
   theme: DashboardTheme;
   onThemeChange: (theme: DashboardTheme) => void;
   onClose: () => void;
-  onRefresh: () => Promise<void>;
   onTargetsChanged: () => Promise<void>;
 }) {
   const [settings, setSettings] = useState({
@@ -1029,9 +1133,6 @@ function DashboardPanelDrawer({
 
   const meta = PANEL_TITLES[panel];
   const Icon = meta.icon;
-  const completeScans = dashboard.recent_scans.filter((scan) => scan.status === "complete");
-  const activeScans = dashboard.recent_scans.filter((scan) => scan.status === "running" || scan.status === "pending");
-  const failedScans = dashboard.recent_scans.filter((scan) => scan.status === "failed");
   const visibleSearchItems = [
     ...dashboard.recent_scans.map((scan) => ({ type: "Scan", label: scan.url, meta: `${scan.status} · ${scan.findings_count} findings` })),
     ...dashboard.top_assets.map((asset) => ({ type: "Asset", label: asset.asset, meta: `${asset.count} findings` })),
@@ -1126,44 +1227,6 @@ function DashboardPanelDrawer({
                   {visibleSearchItems.length === 0 && <p className="text-sm text-zinc-500">No matching dashboard items.</p>}
                 </div>
               </DrawerSection>
-            </>
-          )}
-
-          {panel === "activity" && (
-            <>
-              <div className="grid grid-cols-3 gap-3">
-                <MiniStat label="Running" value={activeScans.length} />
-                <MiniStat label="Completed" value={completeScans.length} />
-                <MiniStat label="Failed" value={failedScans.length} />
-              </div>
-              <DrawerSection title="Recent events">
-                <div className="space-y-2">
-                  {dashboard.recent_scans.slice(0, 10).map((scan) => <ScanRow key={scan.id} scan={scan} />)}
-                  {dashboard.recent_scans.length === 0 && <p className="text-sm text-zinc-500">No scan activity yet.</p>}
-                </div>
-              </DrawerSection>
-              <ActionButton tone="primary" onClick={() => { onRefresh(); showNotice("Dashboard refreshed."); }}>
-                <RefreshCw className="h-4 w-4" /> Refresh now
-              </ActionButton>
-            </>
-          )}
-
-          {panel === "radar" && (
-            <>
-              <DrawerSection title="API and exposure signals">
-                <div className="space-y-2">
-                  {dashboard.category_counts.slice(0, 8).map((category) => (
-                    <div key={category.label} className="dashboard-drawer-row flex items-center justify-between rounded-[4px] border border-white/10 bg-black/18 p-3">
-                      <span className="text-sm text-zinc-200">{category.label}</span>
-                      <span className="dashboard-drawer-count font-mono text-xs text-[#d9f7ff]">{category.count}</span>
-                    </div>
-                  ))}
-                  {dashboard.category_counts.length === 0 && <p className="text-sm text-zinc-500">No API signals retained yet.</p>}
-                </div>
-              </DrawerSection>
-              <ActionButton onClick={() => showNotice("Radar view pinned to dashboard.")}>
-                <Radar className="h-4 w-4" /> Pin radar
-              </ActionButton>
             </>
           )}
 
@@ -1334,27 +1397,707 @@ function WorkspaceEmpty({ title, text }: { title: string; text: string }) {
   );
 }
 
+function HelpTooltip({ label, text }: { label: string; text: string }) {
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-label={label}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-zinc-500 outline-none transition-colors hover:border-[#4fa5b6]/40 hover:text-[#d9f7ff] focus:border-[#4fa5b6]/50 focus:text-[#d9f7ff]"
+      >
+        <CircleHelp className="h-3.5 w-3.5" />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute right-0 top-8 z-20 hidden w-72 rounded-[4px] border border-white/10 bg-[#080a0b] p-3 text-left text-xs leading-5 text-zinc-300 shadow-[0_20px_60px_rgba(0,0,0,0.45)] group-hover:block group-focus-within:block"
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+function findingSeverityClass(severity: PersistentFinding["severity"]) {
+  return cn(
+    severity === "critical" && "border-red-300/20 bg-red-300/10 text-red-200",
+    severity === "high" && "border-[#ef5a2a]/25 bg-[#ef5a2a]/10 text-orange-200",
+    severity === "medium" && "border-amber-300/20 bg-amber-300/10 text-amber-100",
+    severity === "low" && "border-[#4fa5b6]/24 bg-[#4fa5b6]/10 text-[#d9f7ff]",
+    severity === "info" && "border-white/10 bg-white/[0.04] text-zinc-300"
+  );
+}
+
+function findingStatusClass(status: PersistentFinding["status"]) {
+  return cn(
+    status === "new" && "border-[#4fa5b6]/24 bg-[#4fa5b6]/10 text-[#d9f7ff]",
+    status === "triaged" && "border-amber-300/20 bg-amber-300/10 text-amber-100",
+    status === "accepted" && "border-emerald-300/20 bg-emerald-300/10 text-emerald-100",
+    status === "duplicate" && "border-white/10 bg-white/[0.04] text-zinc-300",
+    status === "false_positive" && "border-zinc-400/15 bg-zinc-400/10 text-zinc-300",
+    status === "fixed" && "border-[#4fa5b6]/20 bg-[#4fa5b6]/8 text-[#bdeeff]",
+    status === "regressed" && "border-red-300/24 bg-red-300/10 text-red-200"
+  );
+}
+
+function gateStatusClass(status: ReleaseGate["status"]) {
+  return cn(
+    status === "pass" && "border-emerald-300/20 bg-emerald-300/10 text-emerald-100",
+    status === "warn" && "border-amber-300/20 bg-amber-300/10 text-amber-100",
+    status === "block" && "border-red-300/24 bg-red-300/10 text-red-200"
+  );
+}
+
+function previewStatusClass(preview: ScopePreview) {
+  return preview.allowed
+    ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100"
+    : "border-red-300/24 bg-red-300/10 text-red-200";
+}
+
+function FindingsTriageTable({
+  findings,
+  updatingFindingId,
+  onStatusChange,
+}: {
+  findings: PersistentFinding[];
+  updatingFindingId: string | null;
+  onStatusChange: (findingId: string, status: PersistentFinding["status"]) => void;
+}) {
+  if (findings.length === 0) {
+    return (
+      <WorkspaceEmpty
+        title="No persistent findings yet"
+        text="New completed scans now create durable finding records. Historical reports still appear in the summary panels until new findings are created."
+      />
+    );
+  }
+
+  return (
+    <div className="mt-5 overflow-x-auto rounded-[4px] border border-white/10">
+      <table className="w-full min-w-[980px] text-sm">
+        <thead>
+          <tr className="border-b border-white/8 bg-black/24 text-left text-xs text-zinc-500">
+            <th className="px-3 py-3 font-medium">Finding</th>
+            <th className="px-3 py-3 font-medium">Severity</th>
+            <th className="px-3 py-3 font-medium">Status</th>
+            <th className="px-3 py-3 font-medium">Affected</th>
+            <th className="px-3 py-3 font-medium">Last seen</th>
+            <th className="px-3 py-3 text-right font-medium">Triage</th>
+          </tr>
+        </thead>
+        <tbody>
+          {findings.map((finding) => (
+            <tr key={finding.id} className="border-b border-white/6 last:border-0 hover:bg-white/[0.025]">
+              <td className="max-w-[320px] px-3 py-3">
+                <p className="truncate font-semibold text-zinc-100">{finding.title}</p>
+                <p className="mt-1 truncate text-xs text-zinc-500">{finding.category}</p>
+              </td>
+              <td className="px-3 py-3">
+                <span className={cn("inline-flex rounded-[3px] border px-2.5 py-1 text-xs font-semibold", findingSeverityClass(finding.severity))}>
+                  {finding.severity}
+                </span>
+              </td>
+              <td className="px-3 py-3">
+                <span className={cn("inline-flex rounded-[3px] border px-2.5 py-1 text-xs font-semibold", findingStatusClass(finding.status))}>
+                  {finding.status.replace("_", " ")}
+                </span>
+              </td>
+              <td className="max-w-[260px] truncate px-3 py-3 font-mono text-xs text-zinc-400" title={finding.affected}>
+                {finding.affected}
+              </td>
+              <td className="px-3 py-3 text-xs text-zinc-500">
+                {new Date(finding.last_seen_at).toLocaleString()}
+              </td>
+              <td className="px-3 py-3 text-right">
+                <select
+                  value={finding.status}
+                  disabled={updatingFindingId === finding.id}
+                  onChange={(event) => onStatusChange(finding.id, event.target.value as PersistentFinding["status"])}
+                  className="h-9 rounded-[3px] border border-white/10 bg-[#0b0e0f] px-2 text-xs font-semibold text-zinc-200 outline-none transition-colors focus:border-[#4fa5b6]/60 disabled:opacity-60"
+                  aria-label={`Update status for ${finding.title}`}
+                >
+                  {FINDING_STATUSES.map((status) => (
+                    <option key={status} value={status}>{status.replace("_", " ")}</option>
+                  ))}
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ProgramsWorkspace({
+  programs,
+  scopeRules,
+  authProfilesByProgram,
+  assets,
+  onChanged,
+}: {
+  programs: Program[];
+  scopeRules: Record<string, ScopeRule[]>;
+  authProfilesByProgram: Record<string, AuthProfile[]>;
+  assets: Asset[];
+  onChanged: () => Promise<void>;
+}) {
+  const [programName, setProgramName] = useState("");
+  const [selectedProgramId, setSelectedProgramId] = useState("");
+  const [ruleType, setRuleType] = useState<ScopeRule["rule_type"]>("in_scope");
+  const [pattern, setPattern] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [authName, setAuthName] = useState("");
+  const [authMode, setAuthMode] = useState<AuthProfileMode>("cookie");
+  const [authValue, setAuthValue] = useState("");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [customHeaderName, setCustomHeaderName] = useState("Authorization");
+  const [scopePreview, setScopePreview] = useState<ScopePreview | null>(null);
+  const [releaseGate, setReleaseGate] = useState<ReleaseGate | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const selectedProgram = programs.find((program) => program.id === selectedProgramId) || programs[0] || null;
+  const selectedRules = selectedProgram ? scopeRules[selectedProgram.id] || [] : [];
+  const selectedAuthProfiles = selectedProgram ? authProfilesByProgram[selectedProgram.id] || [] : [];
+
+  const refreshReleaseGate = useCallback(async (programId: string) => {
+    try {
+      setReleaseGate(await getProgramReleaseGate(programId));
+    } catch (err) {
+      setReleaseGate(null);
+      setError(err instanceof Error ? err.message : "Failed to load release gate.");
+    }
+  }, []);
+
+  const handleCreateProgram = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy("program");
+    setError(null);
+    try {
+      const program = await createProgram({
+        name: programName.trim(),
+        scan_intensity: "standard",
+      });
+      setProgramName("");
+      setSelectedProgramId(program.id);
+      await onChanged();
+      await refreshReleaseGate(program.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create program.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleCreateRule = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedProgram) return;
+    setBusy("scope");
+    setError(null);
+    try {
+      await createProgramScopeRule(selectedProgram.id, {
+        rule_type: ruleType,
+        asset_type: inferScopeAssetType(pattern),
+        pattern: pattern.trim(),
+      });
+      setPattern("");
+      await onChanged();
+      await refreshReleaseGate(selectedProgram.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add scope rule.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleCreateAuthProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedProgram) return;
+    setBusy("auth");
+    setError(null);
+    try {
+      const headers: Record<string, string> = {};
+      if (authMode === "cookie") {
+        headers.Cookie = authValue.trim();
+      } else if (authMode === "bearer") {
+        headers.Authorization = authValue.trim().toLowerCase().startsWith("bearer ")
+          ? authValue.trim()
+          : `Bearer ${authValue.trim()}`;
+      } else if (authMode === "basic") {
+        headers.Authorization = `Basic ${window.btoa(`${authUsername}:${authPassword}`)}`;
+      } else {
+        headers[customHeaderName.trim()] = authValue.trim();
+      }
+      await createAuthProfile(selectedProgram.id, {
+        name: authName.trim() || defaultAuthProfileName(authMode),
+        headers,
+      });
+      setAuthName("");
+      setAuthValue("");
+      setAuthUsername("");
+      setAuthPassword("");
+      setCustomHeaderName("Authorization");
+      await onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save auth profile.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleDeleteAuthProfile = async (profileId: string) => {
+    setBusy(`auth:${profileId}`);
+    setError(null);
+    try {
+      await deleteAuthProfile(profileId);
+      await onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete auth profile.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handlePreviewScope = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedProgram) return;
+    setBusy("preview");
+    setError(null);
+    try {
+      setScopePreview(await previewProgramScope(selectedProgram.id, previewUrl.trim()));
+    } catch (err) {
+      setScopePreview(null);
+      setError(err instanceof Error ? err.message : "Failed to preview scope.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <WorkspaceHero
+        eyebrow="Program scope"
+        title="Bug bounty scope is now a first-class workspace."
+        description="Create programs, define in-scope and out-of-scope rules, then connect assets and findings to the same source of truth."
+        icon={ClipboardList}
+      >
+        <div className="grid grid-cols-3 gap-3">
+          <MiniStat label="Programs" value={programs.length} variant="hero" />
+          <MiniStat label="Scope rules" value={Object.values(scopeRules).reduce((total, rules) => total + rules.length, 0)} variant="hero" />
+          <MiniStat label="Assets" value={assets.length} variant="hero" />
+        </div>
+      </WorkspaceHero>
+
+      {error && (
+        <div className="rounded-[4px] border border-red-300/18 bg-red-300/10 px-4 py-3 text-sm text-red-100">
+          {error}
+        </div>
+      )}
+
+      <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+        <DashboardCard>
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-semibold text-zinc-50">Create program</h2>
+                <HelpTooltip label="What is a program?" text="A program groups one bug bounty or internal assessment. Scans, scope rules, auth profiles, assets, and findings are tied back to this workspace." />
+              </div>
+              <p className="mt-1 text-sm text-zinc-500">Use one program per bounty scope or internal assessment.</p>
+            </div>
+            <Target className="h-5 w-5 text-[#4fa5b6]" />
+          </div>
+          <form onSubmit={handleCreateProgram} className="space-y-3">
+            <input
+              value={programName}
+              onChange={(event) => setProgramName(event.target.value)}
+              placeholder="Program name, e.g. Acme bounty"
+              className="h-11 w-full rounded-[4px] border border-white/10 bg-black/24 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#4fa5b6]/60"
+              required
+            />
+            <button
+              type="submit"
+              disabled={busy === "program"}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[4px] bg-white px-4 text-sm font-semibold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-60"
+            >
+              <ClipboardList className="h-4 w-4" />
+              {busy === "program" ? "Creating" : "Create program"}
+            </button>
+          </form>
+
+          <div className="mt-6 space-y-2">
+            {programs.map((program) => (
+              <button
+                key={program.id}
+                type="button"
+                onClick={() => {
+                  setSelectedProgramId(program.id);
+                  setScopePreview(null);
+                  void refreshReleaseGate(program.id);
+                }}
+                className={cn(
+                  "w-full rounded-[4px] border p-3 text-left transition-colors",
+                  selectedProgram?.id === program.id
+                    ? "border-[#4fa5b6]/32 bg-[#4fa5b6]/10"
+                    : "border-white/10 bg-black/18 hover:bg-white/[0.04]"
+                )}
+              >
+                <p className="truncate text-sm font-semibold text-zinc-100">{program.name}</p>
+                <p className="mt-1 truncate font-mono text-xs text-zinc-500">{program.handle || program.id.slice(0, 8)}</p>
+              </button>
+            ))}
+            {programs.length === 0 && (
+              <WorkspaceEmpty title="No programs yet" text="Create your first program to start separating scope, assets, and findings." />
+            )}
+          </div>
+        </DashboardCard>
+
+        <div className="space-y-4">
+          <DashboardCard>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold text-zinc-50">Release gate</h2>
+                  <HelpTooltip label="What is the release gate?" text="The release gate summarizes whether this program is safe to ship based on active scope, blocking critical or high findings, failed scans, and open warnings." />
+                </div>
+                <p className="mt-1 text-sm text-zinc-500">{selectedProgram ? selectedProgram.name : "Select or create a program"}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                {selectedProgram && (
+                  <button
+                    type="button"
+                    onClick={() => void refreshReleaseGate(selectedProgram.id)}
+                    className="inline-flex h-9 items-center justify-center rounded-[3px] border border-white/10 bg-white/[0.04] px-3 text-xs font-semibold text-zinc-200 transition-colors hover:bg-white/[0.08]"
+                  >
+                    Refresh
+                  </button>
+                )}
+                <ShieldCheck className="h-5 w-5 text-[#4fa5b6]" />
+              </div>
+            </div>
+
+            {selectedProgram && releaseGate ? (
+              <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+                <div className={cn("rounded-[4px] border p-4", gateStatusClass(releaseGate.status))}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em]">Gate</p>
+                  <p className="mt-2 text-4xl font-semibold uppercase tracking-tight">{releaseGate.status}</p>
+                  <p className="mt-3 text-xs opacity-80">
+                    {new Date(releaseGate.generated_at).toLocaleString()}
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-[4px] border border-white/10 bg-black/18 p-4">
+                    <p className="text-sm font-semibold text-zinc-100">Blockers</p>
+                    {releaseGate.blockers.length > 0 ? (
+                      <ul className="mt-3 space-y-2 text-sm text-red-100">
+                        {releaseGate.blockers.slice(0, 3).map((item) => (
+                          <li key={item} className="line-clamp-2">{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-sm text-zinc-500">No blocking critical or high issues.</p>
+                    )}
+                  </div>
+                  <div className="rounded-[4px] border border-white/10 bg-black/18 p-4">
+                    <p className="text-sm font-semibold text-zinc-100">Warnings</p>
+                    {releaseGate.warnings.length > 0 ? (
+                      <ul className="mt-3 space-y-2 text-sm text-amber-100">
+                        {releaseGate.warnings.slice(0, 3).map((item) => (
+                          <li key={item} className="line-clamp-2">{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-sm text-zinc-500">No medium issue or failed-scan warnings.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <WorkspaceEmpty title="No gate yet" text="Create a program and add in-scope rules to get a production gate result." />
+            )}
+          </DashboardCard>
+
+          <DashboardCard>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold text-zinc-50">Auth profiles</h2>
+                  <HelpTooltip label="What is an auth profile?" text="An auth profile stores encrypted request headers, such as a Cookie or Authorization token, so scans can test logged-in routes without showing saved secrets back in the UI." />
+                </div>
+                <p className="mt-1 text-sm text-zinc-500">Store scanner cookies or bearer tokens for logged-in coverage.</p>
+              </div>
+              <UserRound className="h-5 w-5 text-[#4fa5b6]" />
+            </div>
+
+            {selectedProgram ? (
+              <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.82fr)_1fr]">
+                <form onSubmit={handleCreateAuthProfile} className="space-y-3">
+                  <input
+                    value={authName}
+                    onChange={(event) => setAuthName(event.target.value)}
+                    placeholder={`${defaultAuthProfileName(authMode)} name`}
+                    className="h-11 w-full rounded-[4px] border border-white/10 bg-black/24 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#4fa5b6]/60"
+                  />
+                  <select
+                    value={authMode}
+                    onChange={(event) => setAuthMode(event.target.value as AuthProfileMode)}
+                    className="h-11 w-full rounded-[4px] border border-white/10 bg-black/24 px-3 text-sm text-zinc-100 outline-none focus:border-[#4fa5b6]/60"
+                  >
+                    <option value="cookie">Cookie session</option>
+                    <option value="bearer">Bearer token</option>
+                    <option value="basic">Basic username/password</option>
+                    <option value="header">Custom header</option>
+                  </select>
+                  {authMode === "header" && (
+                    <input
+                      value={customHeaderName}
+                      onChange={(event) => setCustomHeaderName(event.target.value)}
+                      placeholder="Header name"
+                      className="h-11 w-full rounded-[4px] border border-white/10 bg-black/24 px-3 font-mono text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#4fa5b6]/60"
+                      required
+                    />
+                  )}
+                  {authMode === "basic" ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <input
+                        value={authUsername}
+                        onChange={(event) => setAuthUsername(event.target.value)}
+                        placeholder="Username"
+                        className="h-11 rounded-[4px] border border-white/10 bg-black/24 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#4fa5b6]/60"
+                        required
+                      />
+                      <input
+                        value={authPassword}
+                        onChange={(event) => setAuthPassword(event.target.value)}
+                        placeholder="Password"
+                        type="password"
+                        className="h-11 rounded-[4px] border border-white/10 bg-black/24 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#4fa5b6]/60"
+                        required
+                      />
+                    </div>
+                  ) : (
+                    <textarea
+                      value={authValue}
+                      onChange={(event) => setAuthValue(event.target.value)}
+                      placeholder={authMode === "cookie" ? "session=abc123; csrf=..." : authMode === "bearer" ? "paste token only, or Bearer token" : "Header value"}
+                      className="min-h-24 w-full rounded-[4px] border border-white/10 bg-black/24 p-3 font-mono text-xs leading-5 text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#4fa5b6]/60"
+                      spellCheck={false}
+                      required
+                    />
+                  )}
+                  <button
+                    type="submit"
+                    disabled={busy === "auth"}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[4px] bg-white px-4 text-sm font-semibold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-60"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    {busy === "auth" ? "Encrypting" : "Save auth profile"}
+                  </button>
+                </form>
+
+                <div className="space-y-2">
+                  {selectedAuthProfiles.map((profile) => (
+                    <div key={profile.id} className="grid gap-3 rounded-[4px] border border-white/10 bg-black/18 p-3 md:grid-cols-[1fr_auto] md:items-center">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-zinc-100">{profile.name}</p>
+                        <p className="mt-1 truncate font-mono text-xs text-zinc-500">
+                          {profile.header_names.join(", ") || "headers stored"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteAuthProfile(profile.id)}
+                        disabled={busy === `auth:${profile.id}`}
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-[3px] border border-red-300/18 bg-red-300/10 px-3 text-xs font-semibold text-red-100 transition-colors hover:bg-red-300/16 disabled:opacity-60"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                  {selectedAuthProfiles.length === 0 && (
+                    <WorkspaceEmpty title="No auth profiles yet" text="Add a cookie or authorization header for authenticated route coverage." />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <WorkspaceEmpty title="Program needed" text="Create a program first, then auth profiles can be attached to it." />
+            )}
+          </DashboardCard>
+
+          <DashboardCard>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold text-zinc-50">Scope preview</h2>
+                  <HelpTooltip label="What is scope preview?" text="Scope preview checks a target URL against active in-scope and out-of-scope rules before a scan starts, so accidental out-of-scope scans are blocked early." />
+                </div>
+                <p className="mt-1 text-sm text-zinc-500">Check a URL against program scope before launching a scan.</p>
+              </div>
+              <Radar className="h-5 w-5 text-[#ef5a2a]" />
+            </div>
+
+            {selectedProgram ? (
+              <>
+                <form onSubmit={handlePreviewScope} className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_auto]">
+                  <input
+                    value={previewUrl}
+                    onChange={(event) => setPreviewUrl(event.target.value)}
+                    placeholder="https://staging.example.com"
+                    className="h-11 rounded-[4px] border border-white/10 bg-black/24 px-3 font-mono text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#4fa5b6]/60"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy === "preview"}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-[4px] bg-white px-4 text-sm font-semibold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-60"
+                  >
+                    {busy === "preview" ? "Checking" : "Preview"}
+                  </button>
+                </form>
+                {scopePreview && (
+                  <div className={cn("mt-4 rounded-[4px] border p-4", previewStatusClass(scopePreview))}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-semibold">{scopePreview.allowed ? "Allowed" : "Blocked"}</p>
+                      <span className="font-mono text-xs opacity-80">{scopePreview.status.replaceAll("_", " ")}</span>
+                    </div>
+                    <p className="mt-2 text-sm opacity-90">{scopePreview.message}</p>
+                    <div className="mt-4 grid gap-3 text-xs md:grid-cols-2">
+                      <div>
+                        <p className="font-semibold uppercase tracking-[0.14em] opacity-70">Matched in scope</p>
+                        <p className="mt-1 font-mono">{scopePreview.matched_in_scope_rules.map((rule) => rule.pattern).join(", ") || "none"}</p>
+                      </div>
+                      <div>
+                        <p className="font-semibold uppercase tracking-[0.14em] opacity-70">Matched out of scope</p>
+                        <p className="mt-1 font-mono">{scopePreview.matched_out_of_scope_rules.map((rule) => rule.pattern).join(", ") || "none"}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <WorkspaceEmpty title="Program needed" text="Scope preview needs a selected program." />
+            )}
+          </DashboardCard>
+
+          <DashboardCard>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold text-zinc-50">Scope rules</h2>
+                  <HelpTooltip label="What are scope rules?" text="Scope rules define what the scanner is allowed to touch. Use in-scope rules for approved domains, URLs, paths, IPs, or CIDRs, and out-of-scope rules for excluded surfaces." />
+                </div>
+                <p className="mt-1 text-sm text-zinc-500">{selectedProgram ? selectedProgram.name : "Select or create a program"}</p>
+              </div>
+              <SlidersHorizontal className="h-5 w-5 text-[#ef5a2a]" />
+            </div>
+
+            {selectedProgram ? (
+              <>
+                <form onSubmit={handleCreateRule} className="grid gap-3 lg:grid-cols-[150px_minmax(220px,1fr)_auto]">
+                  <select
+                    value={ruleType}
+                    onChange={(event) => setRuleType(event.target.value as ScopeRule["rule_type"])}
+                    className="h-11 rounded-[4px] border border-white/10 bg-black/24 px-3 text-sm text-zinc-100 outline-none focus:border-[#4fa5b6]/60"
+                  >
+                    <option value="in_scope">In scope</option>
+                    <option value="out_of_scope">Out of scope</option>
+                  </select>
+                  <input
+                    value={pattern}
+                    onChange={(event) => setPattern(event.target.value)}
+                    placeholder="example.com, *.example.com, /admin/*, or 10.0.0.0/24"
+                    className="h-11 rounded-[4px] border border-white/10 bg-black/24 px-3 font-mono text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#4fa5b6]/60"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy === "scope"}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-[4px] bg-white px-4 text-sm font-semibold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-60"
+                  >
+                    Add rule
+                  </button>
+                </form>
+
+                <div className="mt-5 grid gap-2">
+                  {selectedRules.map((rule) => (
+                    <div key={rule.id} className="grid gap-3 rounded-[4px] border border-white/10 bg-black/18 p-3 md:grid-cols-[110px_90px_1fr] md:items-center">
+                      <span className={cn("w-fit rounded-[3px] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", rule.rule_type === "in_scope" ? "bg-[#4fa5b6]/12 text-[#d9f7ff]" : "bg-[#ef5a2a]/10 text-orange-200")}>
+                        {rule.rule_type.replace("_", " ")}
+                      </span>
+                      <span className="font-mono text-xs text-zinc-500">{rule.asset_type}</span>
+                      <span className="truncate font-mono text-sm text-zinc-200" title={rule.pattern}>{rule.pattern}</span>
+                    </div>
+                  ))}
+                  {selectedRules.length === 0 && (
+                    <WorkspaceEmpty title="No scope rules yet" text="Add at least one in-scope rule, then use out-of-scope rules to protect excluded surfaces." />
+                  )}
+                </div>
+              </>
+            ) : (
+              <WorkspaceEmpty title="Program needed" text="Create a program first, then scope rules can be attached to it." />
+            )}
+          </DashboardCard>
+
+          <DashboardCard>
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold text-zinc-50">Recent assets</h2>
+                  <HelpTooltip label="What are recent assets?" text="Recent assets are targets and affected surfaces retained from completed scans and findings, linked back to the selected program for triage." />
+                </div>
+                <p className="mt-1 text-sm text-zinc-500">Assets are populated by completed scans and finding persistence.</p>
+              </div>
+              <Boxes className="h-5 w-5 text-[#4fa5b6]" />
+            </div>
+            {assets.length === 0 ? (
+              <WorkspaceEmpty title="No assets retained yet" text="New findings will create assets automatically; explicit recon assets can be added in the next slice." />
+            ) : (
+              <div className="grid gap-2">
+                {assets.slice(0, 10).map((asset) => (
+                  <div key={asset.id} className="grid gap-3 rounded-[4px] border border-white/10 bg-black/18 p-3 md:grid-cols-[110px_1fr_180px] md:items-center">
+                    <span className="rounded-[3px] border border-white/10 bg-white/[0.04] px-2 py-1 text-xs font-semibold text-zinc-300">{asset.asset_type}</span>
+                    <span className="truncate font-mono text-sm text-zinc-200" title={asset.value}>{asset.value}</span>
+                    <span className="text-xs text-zinc-500">Seen {new Date(asset.last_seen_at).toLocaleDateString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DashboardCard>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SurfaceWorkspace({
   dashboard,
+  programs,
+  authProfilesByProgram,
+  assets,
   onRefresh,
 }: {
   dashboard: ScanDashboardResponse;
+  programs: Program[];
+  authProfilesByProgram: Record<string, AuthProfile[]>;
+  assets: Asset[];
   onRefresh: () => Promise<void>;
 }) {
   const assetItems = dashboard.top_assets.map((item) => ({ label: item.asset, count: item.count }));
+  const classifiedAssets = assets.filter((asset) => asset.metadata_json?.ai_label || asset.metadata_json?.surface_role);
+  const loginCandidates = classifiedAssets.filter((asset) => String(asset.metadata_json?.surface_role || "").includes("login")).length;
 
   return (
     <div className="space-y-4">
       <WorkspaceHero
         eyebrow="Attack surface"
-        title="Every exposed asset gets a real workspace."
-        description="Surface is now a full page for domains, reachable paths, affected assets, and fresh scan launch. Utility controls stay in drawers; this page stays focused on what is reachable."
+        title="Subdomains, routes, and sensitive entry points in one map."
+        description="Completed scans retain discovered hosts, crawled routes, API candidates, and likely login or admin areas so the next scan can focus where abuse would happen."
         icon={Boxes}
       >
         <div className="grid grid-cols-3 gap-3">
-          <MiniStat label="Assets" value={dashboard.top_assets.length} variant="hero" />
-          <MiniStat label="Active" value={dashboard.active_scans} variant="hero" />
-          <MiniStat label="Failed" value={dashboard.failed_scans} variant="hero" />
+          <MiniStat label="Assets" value={assets.length} variant="hero" />
+          <MiniStat label="Classified" value={classifiedAssets.length} variant="hero" />
+          <MiniStat label="Login" value={loginCandidates} variant="hero" />
         </div>
       </WorkspaceHero>
 
@@ -1378,11 +2121,71 @@ function SurfaceWorkspace({
             </div>
             <Play className="h-5 w-5 text-[#ef5a2a]" />
           </div>
-          <QuickScanForm onCreated={onRefresh} />
+          <QuickScanForm onCreated={onRefresh} programs={programs} authProfilesByProgram={authProfilesByProgram} />
           <CommandFlowPreview />
         </DashboardCard>
       </div>
+
+      <SurfaceInventory assets={assets} />
     </div>
+  );
+}
+
+function surfacePriorityClass(priority: unknown) {
+  if (priority === "high") return "border-[#ef5a2a]/40 bg-[#ef5a2a]/10 text-orange-100";
+  if (priority === "medium") return "border-[#e7b84b]/35 bg-[#e7b84b]/10 text-yellow-100";
+  if (priority === "low") return "border-white/10 bg-white/[0.04] text-zinc-400";
+  return "border-[#4fa5b6]/25 bg-[#4fa5b6]/10 text-[#d9f7ff]";
+}
+
+function SurfaceInventory({ assets }: { assets: Asset[] }) {
+  const sortedAssets = [...assets].sort((a, b) => {
+    const rank = { high: 0, medium: 1, normal: 2, low: 3 };
+    const aPriority = String(a.metadata_json?.priority || "normal") as keyof typeof rank;
+    const bPriority = String(b.metadata_json?.priority || "normal") as keyof typeof rank;
+    return (rank[aPriority] ?? 2) - (rank[bPriority] ?? 2) || new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
+  });
+
+  return (
+    <DashboardCard>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-zinc-50">Discovered subdomains and routes</h2>
+          <p className="mt-1 text-sm text-zinc-500">Likely login, admin, API, docs, upload, and operational routes are labeled from scanner evidence.</p>
+        </div>
+        <Radar className="h-5 w-5 text-[#4fa5b6]" />
+      </div>
+      {sortedAssets.length === 0 ? (
+        <WorkspaceEmpty title="No surface map yet" text="Run a scan and discovered subdomains, routes, API candidates, and login-like paths will appear here." />
+      ) : (
+        <div className="grid gap-2">
+          {sortedAssets.slice(0, 100).map((asset) => {
+            const label = String(asset.metadata_json?.ai_label || asset.asset_type);
+            const role = String(asset.metadata_json?.surface_role || asset.asset_type);
+            const priority = String(asset.metadata_json?.priority || "normal");
+            const signals = Array.isArray(asset.metadata_json?.signals) ? asset.metadata_json.signals.map(String).slice(0, 2) : [];
+            return (
+              <div key={asset.id} className="grid gap-3 rounded-[4px] border border-white/10 bg-black/18 p-3 lg:grid-cols-[150px_minmax(0,1fr)_180px] lg:items-center">
+                <div className="flex flex-wrap gap-2">
+                  <span className={cn("rounded-[3px] border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", surfacePriorityClass(priority))}>
+                    {role.replaceAll("_", " ")}
+                  </span>
+                  <span className="rounded-[3px] border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                    {asset.source}
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-sm text-zinc-100" title={asset.value}>{asset.value}</p>
+                  <p className="mt-1 truncate text-xs text-zinc-500">{label}{signals.length ? ` · ${signals.join(", ")}` : ""}</p>
+                </div>
+                <span className="text-xs text-zinc-500">Seen {new Date(asset.last_seen_at).toLocaleString()}</span>
+              </div>
+            );
+          })}
+          {sortedAssets.length > 100 && <p className="pt-2 text-xs text-zinc-500">Showing first 100 of {sortedAssets.length} discovered assets.</p>}
+        </div>
+      )}
+    </DashboardCard>
   );
 }
 
@@ -1465,25 +2268,32 @@ function ScansWorkspace({
   );
 }
 
-function FindingsWorkspace({ dashboard }: { dashboard: ScanDashboardResponse }) {
+function FindingsWorkspace({
+  dashboard,
+  findings,
+  updatingFindingId,
+  onFindingStatusChange,
+}: {
+  dashboard: ScanDashboardResponse;
+  findings: PersistentFinding[];
+  updatingFindingId: string | null;
+  onFindingStatusChange: (findingId: string, status: PersistentFinding["status"]) => void;
+}) {
   const severityTotal = dashboard.total_findings;
-  const severityItems = Object.entries(dashboard.severity_counts);
+  const openFindings = findings.filter((finding) => !["fixed", "false_positive", "duplicate"].includes(finding.status)).length;
 
   return (
     <div className="space-y-4">
       <WorkspaceHero
         eyebrow="Finding triage"
-        title="Risk first, categories second, noise last."
-        description="The findings page gives severity and category triage the full screen so reviewers can see what matters before opening individual reports."
+        title="Persistent findings are ready for triage."
+        description="New scans now create durable finding records with status, affected asset, evidence summary, and dedupe keys. This page is the operator queue."
         icon={ShieldAlert}
       >
-        <div className="grid grid-cols-5 gap-2">
-          {severityItems.map(([severity, count]) => (
-            <div key={severity} className="rounded-[4px] border border-white/10 bg-black/24 p-3 text-center">
-              <p className="font-mono text-2xl font-semibold text-zinc-50">{count}</p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.12em] text-zinc-500">{severity}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-3 gap-3">
+          <MiniStat label="Persistent" value={findings.length} variant="hero" />
+          <MiniStat label="Open" value={openFindings} variant="hero" />
+          <MiniStat label="Report total" value={severityTotal} variant="hero" />
         </div>
       </WorkspaceHero>
 
@@ -1511,6 +2321,21 @@ function FindingsWorkspace({ dashboard }: { dashboard: ScanDashboardResponse }) 
           <BarList items={dashboard.category_counts} emptyTitle="No categories yet" emptyText="Completed reports will populate category triage." />
         </DashboardCard>
       </div>
+
+      <DashboardCard>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-zinc-50">Triage queue</h2>
+            <p className="mt-1 text-sm text-zinc-500">Change status here; the dashboard immediately treats findings as durable records.</p>
+          </div>
+          <Bug className="h-5 w-5 text-[#ef5a2a]" />
+        </div>
+        <FindingsTriageTable
+          findings={findings}
+          updatingFindingId={updatingFindingId}
+          onStatusChange={onFindingStatusChange}
+        />
+      </DashboardCard>
     </div>
   );
 }
@@ -1539,9 +2364,7 @@ function ReportsWorkspace({ dashboard }: { dashboard: ScanDashboardResponse }) {
             <h2 className="text-xl font-semibold text-zinc-50">Completed reports</h2>
             <p className="mt-1 text-sm text-zinc-500">Open the sharp B2B PDF report from the scan row.</p>
           </div>
-          <ActionButton>
-            <Download className="h-4 w-4" /> Prepare bundle
-          </ActionButton>
+          <Download className="h-5 w-5 text-[#4fa5b6]" />
         </div>
         {completeScans.length === 0 ? (
           <WorkspaceEmpty title="No completed reports yet" text="Finished scans will show here with direct access to the report page." />
@@ -1559,100 +2382,21 @@ function ReportsWorkspace({ dashboard }: { dashboard: ScanDashboardResponse }) {
   );
 }
 
-function AgentsWorkspace({ dashboard }: { dashboard: ScanDashboardResponse }) {
-  const router = useRouter();
-  const [profileSaved, setProfileSaved] = useState(false);
-  const modules = [
-    { title: "Discovery", text: "Subdomains, linked hosts, and first reachable paths.", icon: Radar, status: "Active" },
-    { title: "Crawler", text: "Routes, docs, forms, and API-like paths.", icon: Globe2, status: "Active" },
-    { title: "Posture", text: "TLS, headers, exposed admin paths, and scanner signals.", icon: ShieldCheck, status: "Active" },
-    { title: "Report writer", text: "Executive summary, risk framing, and fix prompts.", icon: FileText, status: "Ready" },
-  ];
-
-  const handleSaveProfile = () => {
-    window.localStorage.setItem(
-      "scanai-agent-profile",
-      JSON.stringify({
-        savedAt: new Date().toISOString(),
-        modules: modules.map(({ title, status }) => ({ title, status })),
-      })
-    );
-    setProfileSaved(true);
-    window.setTimeout(() => setProfileSaved(false), 2200);
-  };
-
-  return (
-    <div className="space-y-4">
-      <WorkspaceHero
-        eyebrow="Scan agents"
-        title="Agent modules get a full configuration surface."
-        description="Agents are a primary workspace because they control what each scan does. Settings still live in the drawer; scan behavior lives here."
-        icon={Bot}
-      >
-        <div className="grid grid-cols-3 gap-3">
-          <MiniStat label="Modules" value={modules.length} variant="hero" />
-          <MiniStat label="Active scans" value={dashboard.active_scans} variant="hero" />
-          <MiniStat label="Reports" value={dashboard.reports_ready} variant="hero" />
-        </div>
-      </WorkspaceHero>
-
-      <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
-        <div className="grid gap-4 md:grid-cols-2">
-          {modules.map((module) => {
-            const Icon = module.icon;
-            return (
-              <DashboardCard key={module.title}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="dashboard-module-icon flex h-11 w-11 items-center justify-center rounded-[4px] border border-[#4fa5b6]/24 bg-[#4fa5b6]/10 text-[#bdeeff]">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <span className="rounded-[3px] border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                    {module.status}
-                  </span>
-                </div>
-                <h2 className="mt-6 text-xl font-semibold text-zinc-50">{module.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-zinc-500">{module.text}</p>
-              </DashboardCard>
-            );
-          })}
-        </div>
-
-        <DashboardCard className="mesh-grain-panel bg-[linear-gradient(150deg,rgba(79,165,182,0.12),rgba(255,255,255,0.035)_48%,rgba(239,90,42,0.12))]">
-          <div className="flex h-full flex-col justify-between gap-8">
-            <div>
-              <Sparkles className="h-6 w-6 text-[#ef5a2a]" />
-              <h2 className="mt-5 text-2xl font-semibold text-zinc-50">Default evidence profile</h2>
-              <p className="mt-3 text-sm leading-6 text-zinc-400">
-                Crawl, probe, collect reachable evidence, and produce owner-ready remediation prompts without opening extra navigation.
-              </p>
-              {profileSaved && (
-                <p className="dashboard-agent-save-notice mt-4 rounded-[4px] border border-[#4fa5b6]/24 bg-[#4fa5b6]/10 px-3 py-2 text-sm font-medium text-[#d9f7ff]">
-                  Evidence profile saved for this browser.
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <ActionButton tone="primary" onClick={handleSaveProfile}>
-                <Sparkles className="h-4 w-4" /> {profileSaved ? "Saved" : "Save profile"}
-              </ActionButton>
-              <ActionButton onClick={() => router.push("/settings")}>
-                <Settings className="h-4 w-4" /> Open settings
-              </ActionButton>
-            </div>
-          </div>
-        </DashboardCard>
-      </div>
-    </div>
-  );
-}
-
 function PrimaryWorkspacePage({
   view,
   dashboard,
   schedules,
+  programs,
+  scopeRules,
+  authProfilesByProgram,
+  assets,
+  findings,
   defaultTimezone,
   onRefresh,
   onSchedulesChanged,
+  onBugBountyChanged,
+  updatingFindingId,
+  onFindingStatusChange,
   scanFilter,
   stoppingScanId,
   stopError,
@@ -1661,15 +2405,36 @@ function PrimaryWorkspacePage({
   view: ViewId;
   dashboard: ScanDashboardResponse;
   schedules: ScheduledScan[];
+  programs: Program[];
+  scopeRules: Record<string, ScopeRule[]>;
+  authProfilesByProgram: Record<string, AuthProfile[]>;
+  assets: Asset[];
+  findings: PersistentFinding[];
   defaultTimezone: string;
   onRefresh: () => Promise<void>;
   onSchedulesChanged: () => Promise<void>;
+  onBugBountyChanged: () => Promise<void>;
+  updatingFindingId: string | null;
+  onFindingStatusChange: (findingId: string, status: PersistentFinding["status"]) => void;
   scanFilter: ScanFilter;
   stoppingScanId: string | null;
   stopError: string | null;
   onStopScan: (scanId: string) => void;
 }) {
-  if (view === "surface") return <SurfaceWorkspace dashboard={dashboard} onRefresh={onRefresh} />;
+  if (view === "surface") {
+    return <SurfaceWorkspace dashboard={dashboard} programs={programs} authProfilesByProgram={authProfilesByProgram} assets={assets} onRefresh={onRefresh} />;
+  }
+  if (view === "programs") {
+    return (
+      <ProgramsWorkspace
+        programs={programs}
+        scopeRules={scopeRules}
+        authProfilesByProgram={authProfilesByProgram}
+        assets={assets}
+        onChanged={onBugBountyChanged}
+      />
+    );
+  }
   if (view === "scans") {
     return (
       <ScansWorkspace
@@ -1684,9 +2449,18 @@ function PrimaryWorkspacePage({
       />
     );
   }
-  if (view === "findings") return <FindingsWorkspace dashboard={dashboard} />;
+  if (view === "findings") {
+    return (
+      <FindingsWorkspace
+        dashboard={dashboard}
+        findings={findings}
+        updatingFindingId={updatingFindingId}
+        onFindingStatusChange={onFindingStatusChange}
+      />
+    );
+  }
   if (view === "reports") return <ReportsWorkspace dashboard={dashboard} />;
-  return <AgentsWorkspace dashboard={dashboard} />;
+  return <SurfaceWorkspace dashboard={dashboard} programs={programs} authProfilesByProgram={authProfilesByProgram} assets={assets} onRefresh={onRefresh} />;
 }
 
 function DashboardPageContent() {
@@ -1697,8 +2471,14 @@ function DashboardPageContent() {
   const [schedules, setSchedules] = useState<ScheduledScan[]>([]);
   const [usage, setUsage] = useState<AccountUsage | null>(null);
   const [targets, setTargets] = useState<ScanTarget[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [scopeRules, setScopeRules] = useState<Record<string, ScopeRule[]>>({});
+  const [authProfilesByProgram, setAuthProfilesByProgram] = useState<Record<string, AuthProfile[]>>({});
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [findings, setFindings] = useState<PersistentFinding[]>([]);
   const [loading, setLoading] = useState(true);
   const [stoppingScanId, setStoppingScanId] = useState<string | null>(null);
+  const [updatingFindingId, setUpdatingFindingId] = useState<string | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
   const [theme, setTheme] = useState<DashboardTheme>("dark");
   const [themeLoaded, setThemeLoaded] = useState(false);
@@ -1709,9 +2489,10 @@ function DashboardPageContent() {
 
   const legacyBooleanView =
     (searchParams.get("surface") && "surface") ||
+    (searchParams.get("programs") && "programs") ||
+    (searchParams.get("rules") && "programs") ||
     (searchParams.get("findings") && "findings") ||
     (searchParams.get("reports") && "reports") ||
-    (searchParams.get("agents") && "agents") ||
     null;
   const panelParam = searchParams.get("panel");
   const legacyPanelView = VIEW_IDS.includes(panelParam as ViewId) ? panelParam : null;
@@ -1740,6 +2521,26 @@ function DashboardPageContent() {
     setTargets(targetData);
   }, [user]);
 
+  const loadBugBountyData = useCallback(async () => {
+    if (!user) return;
+    const [programData, assetData, findingData] = await Promise.all([
+      listPrograms(),
+      listAssets({ limit: 500 }),
+      listFindings({ limit: 100 }),
+    ]);
+    const scopeEntries = await Promise.all(
+      programData.map(async (program) => [program.id, await listProgramScope(program.id)] as const)
+    );
+    const authEntries = await Promise.all(
+      programData.map(async (program) => [program.id, await listAuthProfiles(program.id)] as const)
+    );
+    setPrograms(programData);
+    setAssets(assetData);
+    setFindings(findingData);
+    setScopeRules(Object.fromEntries(scopeEntries));
+    setAuthProfilesByProgram(Object.fromEntries(authEntries));
+  }, [user]);
+
   useEffect(() => {
     const savedTheme = window.localStorage.getItem(DASHBOARD_THEME_KEY) === "light" ? "light" : "dark";
     document.documentElement.dataset.scanaiDashboardTheme = savedTheme;
@@ -1766,7 +2567,7 @@ function DashboardPageContent() {
       }
 
       try {
-        await Promise.all([loadDashboard(), loadSchedules(), loadAccountControls()]);
+        await Promise.all([loadDashboard(), loadSchedules(), loadAccountControls(), loadBugBountyData()]);
       } catch (err) {
         console.error("Failed to load dashboard", err);
       } finally {
@@ -1775,7 +2576,7 @@ function DashboardPageContent() {
     }
 
     load();
-  }, [authLoading, loadDashboard, loadSchedules, loadAccountControls, user]);
+  }, [authLoading, loadDashboard, loadSchedules, loadAccountControls, loadBugBountyData, user]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -1789,7 +2590,7 @@ function DashboardPageContent() {
         window.clearTimeout(liveRefreshTimer.current);
       }
       liveRefreshTimer.current = window.setTimeout(() => {
-        loadDashboard().catch((err) => console.error("Failed to refresh dashboard from scan event", err));
+        Promise.all([loadDashboard(), loadBugBountyData()]).catch((err) => console.error("Failed to refresh dashboard from scan event", err));
       }, 150);
     };
 
@@ -1823,7 +2624,7 @@ function DashboardPageContent() {
       if (liveRefreshTimer.current) window.clearTimeout(liveRefreshTimer.current);
       websocket?.close();
     };
-  }, [authLoading, loadDashboard, user]);
+  }, [authLoading, loadDashboard, loadBugBountyData, user]);
 
   const handleStopScan = async (scanId: string) => {
     setStoppingScanId(scanId);
@@ -1836,6 +2637,19 @@ function DashboardPageContent() {
       setStopError(err instanceof Error ? err.message : "Failed to stop scan.");
     } finally {
       setStoppingScanId(null);
+    }
+  };
+
+  const handleFindingStatusChange = async (findingId: string, status: PersistentFinding["status"]) => {
+    setUpdatingFindingId(findingId);
+    try {
+      const updated = await updateFindingStatus(findingId, status);
+      setFindings((current) => current.map((finding) => (finding.id === findingId ? updated : finding)));
+      await loadDashboard();
+    } catch (err) {
+      console.error("Failed to update finding status", err);
+    } finally {
+      setUpdatingFindingId(null);
     }
   };
 
@@ -1865,9 +2679,17 @@ function DashboardPageContent() {
             view={activeView}
             dashboard={dashboard}
             schedules={schedules}
+            programs={programs}
+            scopeRules={scopeRules}
+            authProfilesByProgram={authProfilesByProgram}
+            assets={assets}
+            findings={findings}
             defaultTimezone={user?.timezone || "UTC"}
             onRefresh={loadDashboard}
             onSchedulesChanged={loadSchedules}
+            onBugBountyChanged={loadBugBountyData}
+            updatingFindingId={updatingFindingId}
+            onFindingStatusChange={handleFindingStatusChange}
             scanFilter={scanFilter}
             stoppingScanId={stoppingScanId}
             stopError={stopError}
@@ -1889,7 +2711,13 @@ function DashboardPageContent() {
                 Welcome back, {user?.name || "Operator"}. Start with a URL; the dashboard stays focused on posture, reports, and follow-up.
               </p>
               <div className="mt-6 max-w-2xl">
-                <QuickScanForm onCreated={loadDashboard} onSchedule={handleScheduleFromHero} variant="hero" />
+                <QuickScanForm
+                  onCreated={loadDashboard}
+                  onSchedule={handleScheduleFromHero}
+                  programs={programs}
+                  authProfilesByProgram={authProfilesByProgram}
+                  variant="hero"
+                />
               </div>
               <p className="mt-4 text-xs font-medium uppercase tracking-[0.14em] text-white/42">
                 Crawl / triage / report
@@ -1909,9 +2737,10 @@ function DashboardPageContent() {
           </DashboardCard>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1.4fr_1.4fr_1fr_1fr_1fr]">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1.25fr_1.25fr_1fr_1fr_1fr_1fr]">
           <MetricTile icon={Globe2} label="Total scans" value={dashboard.total_scans} tone="emerald" featured href="/dashboard?view=scans" />
           <MetricTile icon={Target} label="Findings" value={dashboard.total_findings} tone="red" featured href="/dashboard?view=findings" />
+          <MetricTile icon={ClipboardList} label="Programs" value={programs.length} tone="sky" href="/dashboard?view=programs" />
           <MetricTile icon={Clock3} label="Active scans" value={dashboard.active_scans} tone="sky" href="/dashboard?view=scans&status=active" />
           <MetricTile icon={Layers3} label="Reports ready" value={dashboard.reports_ready} tone="amber" href="/dashboard?view=reports" />
           <MetricTile icon={XCircle} label="Failed scans" value={dashboard.failed_scans} tone="red" href="/dashboard?view=scans&status=failed" />
@@ -2008,7 +2837,6 @@ function DashboardPageContent() {
         theme={theme}
         onThemeChange={setTheme}
         onClose={() => router.push(drawerCloseHref)}
-        onRefresh={loadDashboard}
         onTargetsChanged={loadAccountControls}
       />
     </div>

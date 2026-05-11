@@ -1,0 +1,550 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "ScanAI Command desk" [ref=e5] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e6]:
+            - paragraph [ref=e7]: ScanAI
+            - paragraph [ref=e8]: Command desk
+        - navigation "Primary" [ref=e9]:
+          - link "Dashboard" [ref=e10] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e11]
+            - text: Dashboard
+          - link "Surface" [ref=e14] [cursor=pointer]:
+            - /url: /dashboard?view=surface
+            - img [ref=e15]
+            - text: Surface
+          - link "Programs" [ref=e25] [cursor=pointer]:
+            - /url: /dashboard?view=programs
+            - img [ref=e26]
+            - text: Programs
+          - link "Findings" [ref=e29] [cursor=pointer]:
+            - /url: /dashboard?view=findings
+            - img [ref=e30]
+            - text: Findings
+          - link "Reports" [ref=e32] [cursor=pointer]:
+            - /url: /dashboard?view=reports
+            - img [ref=e33]
+            - text: Reports
+        - generic [ref=e36]:
+          - link "Notifications" [ref=e37] [cursor=pointer]:
+            - /url: /settings?panel=notifications
+            - img [ref=e38]
+          - link "Settings" [ref=e41] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e42]
+          - link "H Himanshu himanshudubey2401@gmail.com" [ref=e45] [cursor=pointer]:
+            - /url: /settings?panel=account
+            - generic [ref=e47]: H
+            - generic [ref=e48]:
+              - paragraph [ref=e49]: Himanshu
+              - paragraph [ref=e50]: himanshudubey2401@gmail.com
+            - img [ref=e51]
+          - button "Log out" [ref=e53]:
+            - img [ref=e54]
+    - main [ref=e57]:
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - generic [ref=e61]:
+            - paragraph [ref=e62]: Account controls
+            - heading "Settings" [level=1] [ref=e63]
+          - generic [ref=e64]: himanshudubey2401@gmail.com/Verified email
+        - generic [ref=e65]:
+          - generic [ref=e66]:
+            - generic [ref=e67]:
+              - img [ref=e69]
+              - heading "Profile" [level=2] [ref=e72]
+            - generic [ref=e73]:
+              - generic [ref=e74]:
+                - generic [ref=e75]: Name
+                - textbox "Name" [ref=e76]: Himanshu
+              - button "Save name" [ref=e77]:
+                - img [ref=e78]
+                - text: Save name
+          - generic [ref=e81]:
+            - generic [ref=e82]:
+              - img [ref=e84]
+              - heading "Schedule timezone" [level=2] [ref=e87]
+            - generic [ref=e88]:
+              - generic [ref=e89]:
+                - generic [ref=e90]: Timezone
+                - combobox "Timezone" [ref=e91]:
+                  - option "(UTC-11:00) American Samoa Standard Time - Pacific/Midway"
+                  - option "(UTC-11:00) American Samoa Standard Time - Pacific/Pago_Pago"
+                  - option "(UTC-11:00) Niue Time - Pacific/Niue"
+                  - option "(UTC-10:00) Cook Islands Standard Time - Pacific/Rarotonga"
+                  - option "(UTC-10:00) Hawaii-Aleutian Standard Time - Pacific/Honolulu"
+                  - option "(UTC-10:00) Tahiti Time - Pacific/Tahiti"
+                  - option "(UTC-09:30) Marquesas Time - Pacific/Marquesas"
+                  - option "(UTC-09:00) Gambier Time - Pacific/Gambier"
+                  - option "(UTC-09:00) Hawaii-Aleutian Time (Adak) - America/Adak"
+                  - option "(UTC-08:00) Alaska Time - America/Anchorage"
+                  - option "(UTC-08:00) Alaska Time - America/Juneau"
+                  - option "(UTC-08:00) Alaska Time - America/Metlakatla"
+                  - option "(UTC-08:00) Alaska Time - America/Nome"
+                  - option "(UTC-08:00) Alaska Time - America/Sitka"
+                  - option "(UTC-08:00) Alaska Time - America/Yakutat"
+                  - option "(UTC-08:00) Pitcairn Time - Pacific/Pitcairn"
+                  - option "(UTC-07:00) Mexican Pacific Standard Time - America/Hermosillo"
+                  - option "(UTC-07:00) Mexican Pacific Standard Time - America/Mazatlan"
+                  - option "(UTC-07:00) Mountain Standard Time - America/Creston"
+                  - option "(UTC-07:00) Mountain Standard Time - America/Dawson_Creek"
+                  - option "(UTC-07:00) Mountain Standard Time - America/Fort_Nelson"
+                  - option "(UTC-07:00) Mountain Standard Time - America/Phoenix"
+                  - option "(UTC-07:00) Pacific Time - America/Los_Angeles"
+                  - option "(UTC-07:00) Pacific Time - America/Tijuana"
+                  - option "(UTC-07:00) Pacific Time - America/Vancouver"
+                  - option "(UTC-07:00) Yukon Time - America/Dawson"
+                  - option "(UTC-07:00) Yukon Time - America/Whitehorse"
+                  - option "(UTC-06:00) Central Standard Time - America/Bahia_Banderas"
+                  - option "(UTC-06:00) Central Standard Time - America/Belize"
+                  - option "(UTC-06:00) Central Standard Time - America/Chihuahua"
+                  - option "(UTC-06:00) Central Standard Time - America/Costa_Rica"
+                  - option "(UTC-06:00) Central Standard Time - America/El_Salvador"
+                  - option "(UTC-06:00) Central Standard Time - America/Guatemala"
+                  - option "(UTC-06:00) Central Standard Time - America/Managua"
+                  - option "(UTC-06:00) Central Standard Time - America/Merida"
+                  - option "(UTC-06:00) Central Standard Time - America/Mexico_City"
+                  - option "(UTC-06:00) Central Standard Time - America/Monterrey"
+                  - option "(UTC-06:00) Central Standard Time - America/Regina"
+                  - option "(UTC-06:00) Central Standard Time - America/Swift_Current"
+                  - option "(UTC-06:00) Central Standard Time - America/Tegucigalpa"
+                  - option "(UTC-06:00) Easter Island Time - Pacific/Easter"
+                  - option "(UTC-06:00) Galapagos Time - Pacific/Galapagos"
+                  - option "(UTC-06:00) Mountain Time - America/Boise"
+                  - option "(UTC-06:00) Mountain Time - America/Cambridge_Bay"
+                  - option "(UTC-06:00) Mountain Time - America/Ciudad_Juarez"
+                  - option "(UTC-06:00) Mountain Time - America/Denver"
+                  - option "(UTC-06:00) Mountain Time - America/Edmonton"
+                  - option "(UTC-06:00) Mountain Time - America/Inuvik"
+                  - option "(UTC-05:00) Acre Standard Time - America/Eirunepe"
+                  - option "(UTC-05:00) Acre Standard Time - America/Rio_Branco"
+                  - option "(UTC-05:00) Central Time - America/Chicago"
+                  - option "(UTC-05:00) Central Time - America/Indiana/Knox"
+                  - option "(UTC-05:00) Central Time - America/Indiana/Tell_City"
+                  - option "(UTC-05:00) Central Time - America/Matamoros"
+                  - option "(UTC-05:00) Central Time - America/Menominee"
+                  - option "(UTC-05:00) Central Time - America/North_Dakota/Beulah"
+                  - option "(UTC-05:00) Central Time - America/North_Dakota/Center"
+                  - option "(UTC-05:00) Central Time - America/North_Dakota/New_Salem"
+                  - option "(UTC-05:00) Central Time - America/Ojinaga"
+                  - option "(UTC-05:00) Central Time - America/Rankin_Inlet"
+                  - option "(UTC-05:00) Central Time - America/Resolute"
+                  - option "(UTC-05:00) Central Time - America/Winnipeg"
+                  - option "(UTC-05:00) Colombia Standard Time - America/Bogota"
+                  - option "(UTC-05:00) Eastern Standard Time - America/Cancun"
+                  - option "(UTC-05:00) Eastern Standard Time - America/Cayman"
+                  - option "(UTC-05:00) Eastern Standard Time - America/Coral_Harbour"
+                  - option "(UTC-05:00) Eastern Standard Time - America/Jamaica"
+                  - option "(UTC-05:00) Eastern Standard Time - America/Panama"
+                  - option "(UTC-05:00) Ecuador Time - America/Guayaquil"
+                  - option "(UTC-05:00) Peru Standard Time - America/Lima"
+                  - option "(UTC-04:00) Amazon Standard Time - America/Boa_Vista"
+                  - option "(UTC-04:00) Amazon Standard Time - America/Campo_Grande"
+                  - option "(UTC-04:00) Amazon Standard Time - America/Cuiaba"
+                  - option "(UTC-04:00) Amazon Standard Time - America/Manaus"
+                  - option "(UTC-04:00) Amazon Standard Time - America/Porto_Velho"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Anguilla"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Antigua"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Aruba"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Barbados"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Blanc-Sablon"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Curacao"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Dominica"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Grenada"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Guadeloupe"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Kralendijk"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Lower_Princes"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Marigot"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Martinique"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Montserrat"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Port_of_Spain"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Puerto_Rico"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Santo_Domingo"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/St_Barthelemy"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/St_Kitts"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/St_Lucia"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/St_Thomas"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/St_Vincent"
+                  - option "(UTC-04:00) Atlantic Standard Time - America/Tortola"
+                  - option "(UTC-04:00) Bolivia Time - America/La_Paz"
+                  - option "(UTC-04:00) Chile Time - America/Santiago"
+                  - option "(UTC-04:00) Cuba Time - America/Havana"
+                  - option "(UTC-04:00) Eastern Time - America/Detroit"
+                  - option "(UTC-04:00) Eastern Time - America/Grand_Turk"
+                  - option "(UTC-04:00) Eastern Time - America/Indiana/Marengo"
+                  - option "(UTC-04:00) Eastern Time - America/Indiana/Petersburg"
+                  - option "(UTC-04:00) Eastern Time - America/Indiana/Vevay"
+                  - option "(UTC-04:00) Eastern Time - America/Indiana/Vincennes"
+                  - option "(UTC-04:00) Eastern Time - America/Indiana/Winamac"
+                  - option "(UTC-04:00) Eastern Time - America/Indianapolis"
+                  - option "(UTC-04:00) Eastern Time - America/Iqaluit"
+                  - option "(UTC-04:00) Eastern Time - America/Kentucky/Monticello"
+                  - option "(UTC-04:00) Eastern Time - America/Louisville"
+                  - option "(UTC-04:00) Eastern Time - America/Nassau"
+                  - option "(UTC-04:00) Eastern Time - America/New_York"
+                  - option "(UTC-04:00) Eastern Time - America/Port-au-Prince"
+                  - option "(UTC-04:00) Eastern Time - America/Toronto"
+                  - option "(UTC-04:00) Guyana Time - America/Guyana"
+                  - option "(UTC-04:00) Venezuela Time - America/Caracas"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Argentina/La_Rioja"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Argentina/Rio_Gallegos"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Argentina/Salta"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Argentina/San_Juan"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Argentina/San_Luis"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Argentina/Tucuman"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Argentina/Ushuaia"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Buenos_Aires"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Catamarca"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Cordoba"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Jujuy"
+                  - option "(UTC-03:00) Argentina Standard Time - America/Mendoza"
+                  - option "(UTC-03:00) Atlantic Time - America/Glace_Bay"
+                  - option "(UTC-03:00) Atlantic Time - America/Goose_Bay"
+                  - option "(UTC-03:00) Atlantic Time - America/Halifax"
+                  - option "(UTC-03:00) Atlantic Time - America/Moncton"
+                  - option "(UTC-03:00) Atlantic Time - America/Thule"
+                  - option "(UTC-03:00) Atlantic Time - Atlantic/Bermuda"
+                  - option "(UTC-03:00) Brasilia Standard Time - America/Araguaina"
+                  - option "(UTC-03:00) Brasilia Standard Time - America/Bahia"
+                  - option "(UTC-03:00) Brasilia Standard Time - America/Belem"
+                  - option "(UTC-03:00) Brasilia Standard Time - America/Fortaleza"
+                  - option "(UTC-03:00) Brasilia Standard Time - America/Maceio"
+                  - option "(UTC-03:00) Brasilia Standard Time - America/Recife"
+                  - option "(UTC-03:00) Brasilia Standard Time - America/Santarem"
+                  - option "(UTC-03:00) Brasilia Standard Time - America/Sao_Paulo"
+                  - option "(UTC-03:00) Coyhaique Time - America/Coyhaique"
+                  - option "(UTC-03:00) Falkland Islands Standard Time - Atlantic/Stanley"
+                  - option "(UTC-03:00) French Guiana Time - America/Cayenne"
+                  - option "(UTC-03:00) Palmer Time - Antarctica/Palmer"
+                  - option "(UTC-03:00) Paraguay Standard Time - America/Asuncion"
+                  - option "(UTC-03:00) Punta Arenas Time - America/Punta_Arenas"
+                  - option "(UTC-03:00) Rothera Time - Antarctica/Rothera"
+                  - option "(UTC-03:00) Suriname Time - America/Paramaribo"
+                  - option "(UTC-03:00) Uruguay Standard Time - America/Montevideo"
+                  - option "(UTC-02:30) Newfoundland Time - America/St_Johns"
+                  - option "(UTC-02:00) Fernando de Noronha Standard Time - America/Noronha"
+                  - option "(UTC-02:00) South Georgia Time - Atlantic/South_Georgia"
+                  - option "(UTC-02:00) St. Pierre & Miquelon Time - America/Miquelon"
+                  - option "(UTC-01:00) Cape Verde Standard Time - Atlantic/Cape_Verde"
+                  - option "(UTC-01:00) Greenland Time - America/Godthab"
+                  - option "(UTC-01:00) Greenland Time - America/Scoresbysund"
+                  - option "(UTC+00:00) Azores Time - Atlantic/Azores"
+                  - option "(UTC+00:00) GMT - UTC" [selected]
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Abidjan"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Accra"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Bamako"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Banjul"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Bissau"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Conakry"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Dakar"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Freetown"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Lome"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Monrovia"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Nouakchott"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Ouagadougou"
+                  - option "(UTC+00:00) Greenwich Mean Time - Africa/Sao_Tome"
+                  - option "(UTC+00:00) Greenwich Mean Time - America/Danmarkshavn"
+                  - option "(UTC+00:00) Greenwich Mean Time - Atlantic/Reykjavik"
+                  - option "(UTC+00:00) Greenwich Mean Time - Atlantic/St_Helena"
+                  - option "(UTC+01:00) Central European Standard Time - Africa/Algiers"
+                  - option "(UTC+01:00) Central European Standard Time - Africa/Tunis"
+                  - option "(UTC+01:00) Guernsey Time - Europe/Guernsey"
+                  - option "(UTC+01:00) Ireland Time - Europe/Dublin"
+                  - option "(UTC+01:00) Isle of Man Time - Europe/Isle_of_Man"
+                  - option "(UTC+01:00) Jersey Time - Europe/Jersey"
+                  - option "(UTC+01:00) Morocco Time - Africa/Casablanca"
+                  - option "(UTC+01:00) United Kingdom Time - Europe/London"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Bangui"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Brazzaville"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Douala"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Kinshasa"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Lagos"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Libreville"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Luanda"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Malabo"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Ndjamena"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Niamey"
+                  - option "(UTC+01:00) West Africa Standard Time - Africa/Porto-Novo"
+                  - option "(UTC+01:00) Western European Time - Atlantic/Canary"
+                  - option "(UTC+01:00) Western European Time - Atlantic/Faeroe"
+                  - option "(UTC+01:00) Western European Time - Atlantic/Madeira"
+                  - option "(UTC+01:00) Western European Time - Europe/Lisbon"
+                  - option "(UTC+01:00) Western Sahara Time - Africa/El_Aaiun"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Blantyre"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Bujumbura"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Gaborone"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Harare"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Juba"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Khartoum"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Kigali"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Lubumbashi"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Lusaka"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Maputo"
+                  - option "(UTC+02:00) Central Africa Time - Africa/Windhoek"
+                  - option "(UTC+02:00) Central European Time - Africa/Ceuta"
+                  - option "(UTC+02:00) Central European Time - Arctic/Longyearbyen"
+                  - option "(UTC+02:00) Central European Time - Europe/Amsterdam"
+                  - option "(UTC+02:00) Central European Time - Europe/Andorra"
+                  - option "(UTC+02:00) Central European Time - Europe/Belgrade"
+                  - option "(UTC+02:00) Central European Time - Europe/Berlin"
+                  - option "(UTC+02:00) Central European Time - Europe/Bratislava"
+                  - option "(UTC+02:00) Central European Time - Europe/Brussels"
+                  - option "(UTC+02:00) Central European Time - Europe/Budapest"
+                  - option "(UTC+02:00) Central European Time - Europe/Busingen"
+                  - option "(UTC+02:00) Central European Time - Europe/Copenhagen"
+                  - option "(UTC+02:00) Central European Time - Europe/Gibraltar"
+                  - option "(UTC+02:00) Central European Time - Europe/Ljubljana"
+                  - option "(UTC+02:00) Central European Time - Europe/Luxembourg"
+                  - option "(UTC+02:00) Central European Time - Europe/Madrid"
+                  - option "(UTC+02:00) Central European Time - Europe/Malta"
+                  - option "(UTC+02:00) Central European Time - Europe/Monaco"
+                  - option "(UTC+02:00) Central European Time - Europe/Oslo"
+                  - option "(UTC+02:00) Central European Time - Europe/Paris"
+                  - option "(UTC+02:00) Central European Time - Europe/Podgorica"
+                  - option "(UTC+02:00) Central European Time - Europe/Prague"
+                  - option "(UTC+02:00) Central European Time - Europe/Rome"
+                  - option "(UTC+02:00) Central European Time - Europe/San_Marino"
+                  - option "(UTC+02:00) Central European Time - Europe/Sarajevo"
+                  - option "(UTC+02:00) Central European Time - Europe/Skopje"
+                  - option "(UTC+02:00) Central European Time - Europe/Stockholm"
+                  - option "(UTC+02:00) Central European Time - Europe/Tirane"
+                  - option "(UTC+02:00) Central European Time - Europe/Vaduz"
+                  - option "(UTC+02:00) Central European Time - Europe/Vatican"
+                  - option "(UTC+02:00) Central European Time - Europe/Vienna"
+                  - option "(UTC+02:00) Central European Time - Europe/Warsaw"
+                  - option "(UTC+02:00) Central European Time - Europe/Zagreb"
+                  - option "(UTC+02:00) Central European Time - Europe/Zurich"
+                  - option "(UTC+02:00) Eastern European Standard Time - Africa/Tripoli"
+                  - option "(UTC+02:00) Eastern European Standard Time - Europe/Kaliningrad"
+                  - option "(UTC+02:00) South Africa Standard Time - Africa/Johannesburg"
+                  - option "(UTC+02:00) South Africa Standard Time - Africa/Maseru"
+                  - option "(UTC+02:00) South Africa Standard Time - Africa/Mbabane"
+                  - option "(UTC+02:00) Troll Time - Antarctica/Troll"
+                  - option "(UTC+03:00) Arabian Standard Time - Asia/Aden"
+                  - option "(UTC+03:00) Arabian Standard Time - Asia/Baghdad"
+                  - option "(UTC+03:00) Arabian Standard Time - Asia/Bahrain"
+                  - option "(UTC+03:00) Arabian Standard Time - Asia/Kuwait"
+                  - option "(UTC+03:00) Arabian Standard Time - Asia/Qatar"
+                  - option "(UTC+03:00) Arabian Standard Time - Asia/Riyadh"
+                  - option "(UTC+03:00) East Africa Time - Africa/Addis_Ababa"
+                  - option "(UTC+03:00) East Africa Time - Africa/Asmera"
+                  - option "(UTC+03:00) East Africa Time - Africa/Dar_es_Salaam"
+                  - option "(UTC+03:00) East Africa Time - Africa/Djibouti"
+                  - option "(UTC+03:00) East Africa Time - Africa/Kampala"
+                  - option "(UTC+03:00) East Africa Time - Africa/Mogadishu"
+                  - option "(UTC+03:00) East Africa Time - Africa/Nairobi"
+                  - option "(UTC+03:00) East Africa Time - Indian/Antananarivo"
+                  - option "(UTC+03:00) East Africa Time - Indian/Comoro"
+                  - option "(UTC+03:00) East Africa Time - Indian/Mayotte"
+                  - option "(UTC+03:00) Eastern European Time - Africa/Cairo"
+                  - option "(UTC+03:00) Eastern European Time - Asia/Beirut"
+                  - option "(UTC+03:00) Eastern European Time - Asia/Gaza"
+                  - option "(UTC+03:00) Eastern European Time - Asia/Hebron"
+                  - option "(UTC+03:00) Eastern European Time - Asia/Nicosia"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Athens"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Bucharest"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Chisinau"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Helsinki"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Kiev"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Mariehamn"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Riga"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Sofia"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Tallinn"
+                  - option "(UTC+03:00) Eastern European Time - Europe/Vilnius"
+                  - option "(UTC+03:00) Famagusta Time - Asia/Famagusta"
+                  - option "(UTC+03:00) Israel Time - Asia/Jerusalem"
+                  - option "(UTC+03:00) Jordan Time - Asia/Amman"
+                  - option "(UTC+03:00) Kirov Time - Europe/Kirov"
+                  - option "(UTC+03:00) Moscow Standard Time - Europe/Minsk"
+                  - option "(UTC+03:00) Moscow Standard Time - Europe/Moscow"
+                  - option "(UTC+03:00) Moscow Standard Time - Europe/Simferopol"
+                  - option "(UTC+03:00) Syowa Time - Antarctica/Syowa"
+                  - option "(UTC+03:00) Syria Time - Asia/Damascus"
+                  - option "(UTC+03:00) Türkiye Time - Europe/Istanbul"
+                  - option "(UTC+03:00) Volgograd Standard Time - Europe/Volgograd"
+                  - option "(UTC+03:30) Iran Standard Time - Asia/Tehran"
+                  - option "(UTC+04:00) Armenia Standard Time - Asia/Yerevan"
+                  - option "(UTC+04:00) Astrakhan Time - Europe/Astrakhan"
+                  - option "(UTC+04:00) Azerbaijan Standard Time - Asia/Baku"
+                  - option "(UTC+04:00) Georgia Standard Time - Asia/Tbilisi"
+                  - option "(UTC+04:00) Gulf Standard Time - Asia/Dubai"
+                  - option "(UTC+04:00) Gulf Standard Time - Asia/Muscat"
+                  - option "(UTC+04:00) Mauritius Standard Time - Indian/Mauritius"
+                  - option "(UTC+04:00) Réunion Time - Indian/Reunion"
+                  - option "(UTC+04:00) Samara Standard Time - Europe/Samara"
+                  - option "(UTC+04:00) Saratov Time - Europe/Saratov"
+                  - option "(UTC+04:00) Seychelles Time - Indian/Mahe"
+                  - option "(UTC+04:00) Ulyanovsk Time - Europe/Ulyanovsk"
+                  - option "(UTC+04:30) Afghanistan Time - Asia/Kabul"
+                  - option "(UTC+05:00) French Southern & Antarctic Time - Indian/Kerguelen"
+                  - option "(UTC+05:00) Kazakhstan Time - Asia/Almaty"
+                  - option "(UTC+05:00) Kazakhstan Time - Asia/Aqtau"
+                  - option "(UTC+05:00) Kazakhstan Time - Asia/Aqtobe"
+                  - option "(UTC+05:00) Kazakhstan Time - Asia/Atyrau"
+                  - option "(UTC+05:00) Kazakhstan Time - Asia/Oral"
+                  - option "(UTC+05:00) Kazakhstan Time - Asia/Qostanay"
+                  - option "(UTC+05:00) Kazakhstan Time - Asia/Qyzylorda"
+                  - option "(UTC+05:00) Maldives Time - Indian/Maldives"
+                  - option "(UTC+05:00) Mawson Time - Antarctica/Mawson"
+                  - option "(UTC+05:00) Pakistan Standard Time - Asia/Karachi"
+                  - option "(UTC+05:00) Tajikistan Time - Asia/Dushanbe"
+                  - option "(UTC+05:00) Turkmenistan Standard Time - Asia/Ashgabat"
+                  - option "(UTC+05:00) Uzbekistan Standard Time - Asia/Samarkand"
+                  - option "(UTC+05:00) Uzbekistan Standard Time - Asia/Tashkent"
+                  - option "(UTC+05:00) Vostok Time - Antarctica/Vostok"
+                  - option "(UTC+05:00) Yekaterinburg Standard Time - Asia/Yekaterinburg"
+                  - option "(UTC+05:30) India Standard Time - Asia/Calcutta"
+                  - option "(UTC+05:30) India Standard Time - Asia/Colombo"
+                  - option "(UTC+05:45) Nepal Time - Asia/Katmandu"
+                  - option "(UTC+06:00) Bangladesh Standard Time - Asia/Dhaka"
+                  - option "(UTC+06:00) Bhutan Time - Asia/Thimphu"
+                  - option "(UTC+06:00) Indian Ocean Time - Indian/Chagos"
+                  - option "(UTC+06:00) Kyrgyzstan Time - Asia/Bishkek"
+                  - option "(UTC+06:00) Omsk Standard Time - Asia/Omsk"
+                  - option "(UTC+06:00) Urumqi Time - Asia/Urumqi"
+                  - option "(UTC+06:30) Cocos Islands Time - Indian/Cocos"
+                  - option "(UTC+06:30) Myanmar Time - Asia/Rangoon"
+                  - option "(UTC+07:00) Barnaul Time - Asia/Barnaul"
+                  - option "(UTC+07:00) Christmas Island Time - Indian/Christmas"
+                  - option "(UTC+07:00) Davis Time - Antarctica/Davis"
+                  - option "(UTC+07:00) Hovd Standard Time - Asia/Hovd"
+                  - option "(UTC+07:00) Indochina Time - Asia/Bangkok"
+                  - option "(UTC+07:00) Indochina Time - Asia/Phnom_Penh"
+                  - option "(UTC+07:00) Indochina Time - Asia/Saigon"
+                  - option "(UTC+07:00) Indochina Time - Asia/Vientiane"
+                  - option "(UTC+07:00) Krasnoyarsk Standard Time - Asia/Krasnoyarsk"
+                  - option "(UTC+07:00) Krasnoyarsk Standard Time - Asia/Novokuznetsk"
+                  - option "(UTC+07:00) Novosibirsk Standard Time - Asia/Novosibirsk"
+                  - option "(UTC+07:00) Tomsk Time - Asia/Tomsk"
+                  - option "(UTC+07:00) Western Indonesia Time - Asia/Jakarta"
+                  - option "(UTC+07:00) Western Indonesia Time - Asia/Pontianak"
+                  - option "(UTC+08:00) Australian Western Standard Time - Antarctica/Casey"
+                  - option "(UTC+08:00) Australian Western Standard Time - Australia/Perth"
+                  - option "(UTC+08:00) Brunei Time - Asia/Brunei"
+                  - option "(UTC+08:00) Central Indonesia Time - Asia/Makassar"
+                  - option "(UTC+08:00) China Standard Time - Asia/Macau"
+                  - option "(UTC+08:00) China Standard Time - Asia/Shanghai"
+                  - option "(UTC+08:00) Hong Kong Standard Time - Asia/Hong_Kong"
+                  - option "(UTC+08:00) Irkutsk Standard Time - Asia/Irkutsk"
+                  - option "(UTC+08:00) Malaysia Time - Asia/Kuala_Lumpur"
+                  - option "(UTC+08:00) Malaysia Time - Asia/Kuching"
+                  - option "(UTC+08:00) Philippine Standard Time - Asia/Manila"
+                  - option "(UTC+08:00) Singapore Standard Time - Asia/Singapore"
+                  - option "(UTC+08:00) Taiwan Standard Time - Asia/Taipei"
+                  - option "(UTC+08:00) Ulaanbaatar Standard Time - Asia/Ulaanbaatar"
+                  - option "(UTC+08:45) Australian Central Western Standard Time - Australia/Eucla"
+                  - option "(UTC+09:00) Eastern Indonesia Time - Asia/Jayapura"
+                  - option "(UTC+09:00) Japan Standard Time - Asia/Tokyo"
+                  - option "(UTC+09:00) Korean Standard Time - Asia/Pyongyang"
+                  - option "(UTC+09:00) Korean Standard Time - Asia/Seoul"
+                  - option "(UTC+09:00) Palau Time - Pacific/Palau"
+                  - option "(UTC+09:00) Timor-Leste Time - Asia/Dili"
+                  - option "(UTC+09:00) Yakutsk Standard Time - Asia/Chita"
+                  - option "(UTC+09:00) Yakutsk Standard Time - Asia/Khandyga"
+                  - option "(UTC+09:00) Yakutsk Standard Time - Asia/Yakutsk"
+                  - option "(UTC+09:30) Australian Central Standard Time - Australia/Darwin"
+                  - option "(UTC+09:30) Australian Central Time - Australia/Adelaide"
+                  - option "(UTC+09:30) Australian Central Time - Australia/Broken_Hill"
+                  - option "(UTC+10:00) Australian Eastern Standard Time - Australia/Brisbane"
+                  - option "(UTC+10:00) Australian Eastern Standard Time - Australia/Lindeman"
+                  - option "(UTC+10:00) Australian Eastern Time - Antarctica/Macquarie"
+                  - option "(UTC+10:00) Australian Eastern Time - Australia/Hobart"
+                  - option "(UTC+10:00) Australian Eastern Time - Australia/Melbourne"
+                  - option "(UTC+10:00) Australian Eastern Time - Australia/Sydney"
+                  - option "(UTC+10:00) Chamorro Standard Time - Pacific/Guam"
+                  - option "(UTC+10:00) Chamorro Standard Time - Pacific/Saipan"
+                  - option "(UTC+10:00) Chuuk Time - Pacific/Truk"
+                  - option "(UTC+10:00) Dumont d’Urville Time - Antarctica/DumontDUrville"
+                  - option "(UTC+10:00) Papua New Guinea Time - Pacific/Port_Moresby"
+                  - option "(UTC+10:00) Vladivostok Standard Time - Asia/Ust-Nera"
+                  - option "(UTC+10:00) Vladivostok Standard Time - Asia/Vladivostok"
+                  - option "(UTC+10:30) Lord Howe Time - Australia/Lord_Howe"
+                  - option "(UTC+11:00) Bougainville Time - Pacific/Bougainville"
+                  - option "(UTC+11:00) Kosrae Time - Pacific/Kosrae"
+                  - option "(UTC+11:00) Magadan Standard Time - Asia/Magadan"
+                  - option "(UTC+11:00) New Caledonia Standard Time - Pacific/Noumea"
+                  - option "(UTC+11:00) Norfolk Island Time - Pacific/Norfolk"
+                  - option "(UTC+11:00) Pohnpei Time - Pacific/Ponape"
+                  - option "(UTC+11:00) Sakhalin Standard Time - Asia/Sakhalin"
+                  - option "(UTC+11:00) Solomon Islands Time - Pacific/Guadalcanal"
+                  - option "(UTC+11:00) Srednekolymsk Time - Asia/Srednekolymsk"
+                  - option "(UTC+11:00) Vanuatu Standard Time - Pacific/Efate"
+                  - option "(UTC+12:00) Anadyr Standard Time - Asia/Anadyr"
+                  - option "(UTC+12:00) Fiji Standard Time - Pacific/Fiji"
+                  - option "(UTC+12:00) Gilbert Islands Time - Pacific/Tarawa"
+                  - option "(UTC+12:00) Kamchatka Standard Time - Asia/Kamchatka"
+                  - option "(UTC+12:00) Marshall Islands Time - Pacific/Kwajalein"
+                  - option "(UTC+12:00) Marshall Islands Time - Pacific/Majuro"
+                  - option "(UTC+12:00) Nauru Time - Pacific/Nauru"
+                  - option "(UTC+12:00) New Zealand Time - Antarctica/McMurdo"
+                  - option "(UTC+12:00) New Zealand Time - Pacific/Auckland"
+                  - option "(UTC+12:00) Tuvalu Time - Pacific/Funafuti"
+                  - option "(UTC+12:00) Wake Island Time - Pacific/Wake"
+                  - option "(UTC+12:00) Wallis & Futuna Time - Pacific/Wallis"
+                  - option "(UTC+12:45) Chatham Time - Pacific/Chatham"
+                  - option "(UTC+13:00) Phoenix Islands Time - Pacific/Enderbury"
+                  - option "(UTC+13:00) Samoa Standard Time - Pacific/Apia"
+                  - option "(UTC+13:00) Tokelau Time - Pacific/Fakaofo"
+                  - option "(UTC+13:00) Tonga Standard Time - Pacific/Tongatapu"
+                  - option "(UTC+14:00) Line Islands Time - Pacific/Kiritimati"
+              - paragraph [ref=e92]: Recurring checkups use this timezone. New accounts start with a best-effort timezone from signup IP, and you can adjust it here.
+              - button "Save timezone" [ref=e93]:
+                - img [ref=e94]
+                - text: Save timezone
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - img [ref=e100]
+              - heading "Email" [level=2] [ref=e104]
+            - generic [ref=e105]:
+              - generic [ref=e106]:
+                - generic [ref=e107]: Current email
+                - textbox "Current email" [disabled] [ref=e108]: himanshudubey2401@gmail.com
+              - generic [ref=e109]:
+                - generic [ref=e110]: New email
+                - textbox "New email" [ref=e111]
+              - generic [ref=e112]:
+                - generic [ref=e113]: Current password
+                - textbox "Current password" [ref=e114]
+              - button "Send verification code" [ref=e115]:
+                - img [ref=e116]
+                - text: Send verification code
+          - generic [ref=e120]:
+            - generic [ref=e121]:
+              - img [ref=e123]
+              - heading "Password" [level=2] [ref=e126]
+            - generic [ref=e127]:
+              - generic [ref=e128]:
+                - generic [ref=e129]: Current password
+                - textbox "Current password" [ref=e130]
+              - generic [ref=e131]:
+                - generic [ref=e132]: New password
+                - textbox "New password" [ref=e133]
+              - generic [ref=e134]:
+                - generic [ref=e135]: Confirm new password
+                - textbox "Confirm new password" [ref=e136]
+              - button "Change password" [ref=e137]:
+                - img [ref=e138]
+                - text: Change password
+          - generic [ref=e141]:
+            - generic [ref=e142]:
+              - img [ref=e144]
+              - heading "Security mail" [level=2] [ref=e147]
+            - generic [ref=e148]:
+              - generic [ref=e149]:
+                - img [ref=e150]
+                - text: Name changes
+              - generic [ref=e153]:
+                - img [ref=e154]
+                - text: Email change requests
+              - generic [ref=e157]:
+                - img [ref=e158]
+                - text: New email verification
+              - generic [ref=e161]:
+                - img [ref=e162]
+                - text: Password changes
+  - button "Open Next.js Dev Tools" [ref=e170] [cursor=pointer]:
+    - img [ref=e171]
+  - alert [ref=e174]

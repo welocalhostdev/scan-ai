@@ -13,7 +13,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
       return;
     }
 
-    router.replace("/");
+    const nextPath = `${window.location.pathname}${window.location.search}`;
+    router.replace(`/login?next=${encodeURIComponent(nextPath)}`);
   }, [loading, router, user]);
 
   if (loading || !user) {

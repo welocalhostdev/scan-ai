@@ -9,6 +9,7 @@ import re
 import base64
 import hashlib
 import ipaddress
+import fnmatch
 import smtplib
 import secrets
 import subprocess
@@ -31,8 +32,40 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 
 from config import settings
+from auth_profiles import (
+    AuthProfileError,
+    auth_header_names,
+    decrypt_auth_headers,
+    encrypt_auth_headers,
+    sanitize_auth_headers,
+)
 from database import init_db, get_db, SessionLocal, engine
-from models import AccountVerification, AccountVerificationPurpose, EmailDeliveryStatus, EmailNotification, Scan, ScanStatus, ScanTarget, ScanTargetStatus, ScheduledScan, User, UserPlan, UserRole, TokenUsage
+from models import (
+    AccountVerification,
+    AccountVerificationPurpose,
+    Asset,
+    AssetType,
+    AuthProfile,
+    EmailDeliveryStatus,
+    EmailNotification,
+    Evidence,
+    Finding,
+    FindingSeverity,
+    FindingStatus,
+    Program,
+    Scan,
+    ScanStatus,
+    ScanTarget,
+    ScanTargetStatus,
+    ScheduledScan,
+    ScopeAssetType,
+    ScopeRule,
+    ScopeRuleType,
+    User,
+    UserPlan,
+    UserRole,
+    TokenUsage,
+)
 from validators import validate_url, URLValidationError
 from auth import (
     hash_password,
@@ -170,6 +203,8 @@ class AuthResponse(BaseModel):
 # Scan models
 class ScanRequest(BaseModel):
     url: str
+    program_id: str
+    auth_profile_id: str | None = None
 
 
 class ScanCreateResponse(BaseModel):
@@ -292,6 +327,8 @@ class ScanStatusResponse(BaseModel):
     report: dict[str, Any] | None = None
     error: str | None = None
     pdf_url: str | None = None
+    program_id: str | None = None
+    auth_profile_id: str | None = None
     created_at: str
     user_id: str | None = None
 
@@ -336,6 +373,140 @@ class ScanDashboardResponse(BaseModel):
     top_assets: list[DashboardAssetCount]
     scans_by_day: list[DashboardDayCount]
     recent_scans: list[DashboardRecentScan]
+
+
+class ProgramCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=180)
+    handle: str | None = Field(default=None, max_length=120)
+    safe_harbor: str | None = None
+    notes: str | None = None
+    scan_intensity: str = Field(default="standard", max_length=40)
+    is_active: bool = True
+
+
+class ProgramResponse(BaseModel):
+    id: str
+    name: str
+    handle: str | None = None
+    safe_harbor: str | None = None
+    notes: str | None = None
+    scan_intensity: str
+    is_active: bool
+    created_at: str
+    updated_at: str
+
+
+class ScopeRuleCreateRequest(BaseModel):
+    rule_type: str = Field(pattern="^(in_scope|out_of_scope)$")
+    asset_type: str = Field(default="domain", pattern="^(domain|wildcard|url|ip|cidr|path)$")
+    pattern: str = Field(min_length=1, max_length=2048)
+    description: str | None = None
+    allowed_tests: list[str] | None = None
+    forbidden_tests: list[str] | None = None
+    is_active: bool = True
+
+
+class ScopeRuleResponse(BaseModel):
+    id: str
+    program_id: str
+    rule_type: str
+    asset_type: str
+    pattern: str
+    description: str | None = None
+    allowed_tests: list[str] | None = None
+    forbidden_tests: list[str] | None = None
+    is_active: bool
+    created_at: str
+
+
+class AuthProfileCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = None
+    headers: dict[str, str] = Field(default_factory=dict)
+    is_active: bool = True
+
+
+class AuthProfileResponse(BaseModel):
+    id: str
+    program_id: str
+    name: str
+    description: str | None = None
+    header_names: list[str]
+    is_active: bool
+    created_at: str
+    updated_at: str
+
+
+class ScopePreviewRequest(BaseModel):
+    url: str
+
+
+class ScopePreviewResponse(BaseModel):
+    url: str
+    program_id: str
+    status: str
+    allowed: bool
+    message: str
+    matched_in_scope_rules: list[ScopeRuleResponse]
+    matched_out_of_scope_rules: list[ScopeRuleResponse]
+    allowed_tests: list[str]
+    forbidden_tests: list[str]
+
+
+class ReleaseGateResponse(BaseModel):
+    program_id: str
+    status: str
+    blockers: list[str]
+    warnings: list[str]
+    counts: dict[str, int]
+    generated_at: str
+
+
+class AssetResponse(BaseModel):
+    id: str
+    value: str
+    asset_type: str
+    source: str
+    metadata_json: dict[str, Any] | None = None
+    first_seen_at: str
+    last_seen_at: str
+    scan_id: str | None = None
+    program_id: str | None = None
+
+
+class EvidenceResponse(BaseModel):
+    id: str
+    finding_id: str
+    evidence_type: str
+    title: str
+    content: str | None = None
+    storage_url: str | None = None
+    raw_json: dict[str, Any] | None = None
+    created_at: str
+
+
+class FindingResponse(BaseModel):
+    id: str
+    title: str
+    category: str
+    severity: str
+    status: str
+    affected: str
+    evidence_summary: str | None = None
+    what_it_means: str | None = None
+    remediation: list[str] | None = None
+    fix_prompt: str | None = None
+    source: str
+    dedupe_key: str
+    first_seen_at: str
+    last_seen_at: str
+    scan_id: str | None = None
+    asset_id: str | None = None
+    program_id: str | None = None
+
+
+class FindingStatusUpdateRequest(BaseModel):
+    status: str = Field(pattern="^(new|triaged|accepted|duplicate|false_positive|fixed|regressed)$")
 
 
 # Admin models
@@ -539,6 +710,99 @@ def _scan_target_to_response(target: ScanTarget) -> ScanTargetResponse:
     )
 
 
+def _program_to_response(program: Program) -> ProgramResponse:
+    return ProgramResponse(
+        id=str(program.id),
+        name=program.name,
+        handle=program.handle,
+        safe_harbor=program.safe_harbor,
+        notes=program.notes,
+        scan_intensity=program.scan_intensity,
+        is_active=program.is_active,
+        created_at=program.created_at.isoformat(),
+        updated_at=program.updated_at.isoformat(),
+    )
+
+
+def _auth_profile_to_response(profile: AuthProfile) -> AuthProfileResponse:
+    names = profile.header_names if isinstance(profile.header_names, list) else []
+    return AuthProfileResponse(
+        id=str(profile.id),
+        program_id=str(profile.program_id),
+        name=profile.name,
+        description=profile.description,
+        header_names=[str(name) for name in names],
+        is_active=profile.is_active,
+        created_at=profile.created_at.isoformat(),
+        updated_at=profile.updated_at.isoformat(),
+    )
+
+
+def _scope_rule_to_response(rule: ScopeRule) -> ScopeRuleResponse:
+    return ScopeRuleResponse(
+        id=str(rule.id),
+        program_id=str(rule.program_id),
+        rule_type=rule.rule_type.value,
+        asset_type=rule.asset_type.value,
+        pattern=rule.pattern,
+        description=rule.description,
+        allowed_tests=rule.allowed_tests,
+        forbidden_tests=rule.forbidden_tests,
+        is_active=rule.is_active,
+        created_at=rule.created_at.isoformat(),
+    )
+
+
+def _asset_to_response(asset: Asset) -> AssetResponse:
+    return AssetResponse(
+        id=str(asset.id),
+        value=asset.value,
+        asset_type=asset.asset_type.value,
+        source=asset.source,
+        metadata_json=asset.metadata_json,
+        first_seen_at=asset.first_seen_at.isoformat(),
+        last_seen_at=asset.last_seen_at.isoformat(),
+        scan_id=str(asset.scan_id) if asset.scan_id else None,
+        program_id=str(asset.program_id) if asset.program_id else None,
+    )
+
+
+def _finding_to_response(finding: Finding) -> FindingResponse:
+    remediation = finding.remediation if isinstance(finding.remediation, list) else None
+    return FindingResponse(
+        id=str(finding.id),
+        title=finding.title,
+        category=finding.category,
+        severity=finding.severity.value,
+        status=finding.status.value,
+        affected=finding.affected,
+        evidence_summary=finding.evidence_summary,
+        what_it_means=finding.what_it_means,
+        remediation=remediation,
+        fix_prompt=finding.fix_prompt,
+        source=finding.source,
+        dedupe_key=finding.dedupe_key,
+        first_seen_at=finding.first_seen_at.isoformat(),
+        last_seen_at=finding.last_seen_at.isoformat(),
+        scan_id=str(finding.scan_id) if finding.scan_id else None,
+        asset_id=str(finding.asset_id) if finding.asset_id else None,
+        program_id=str(finding.program_id) if finding.program_id else None,
+    )
+
+
+def _evidence_to_response(evidence: Evidence) -> EvidenceResponse:
+    return EvidenceResponse(
+        id=str(evidence.id),
+        finding_id=str(evidence.finding_id),
+        evidence_type=evidence.evidence_type.value,
+        title=evidence.title,
+        content=evidence.content,
+        storage_url=evidence.storage_url,
+        raw_json=evidence.raw_json,
+        created_at=evidence.created_at.isoformat(),
+    )
+
+
 def _dig_txt_records(name: str) -> list[str]:
     try:
         completed = subprocess.run(
@@ -604,10 +868,23 @@ def _validate_cron_pattern(pattern: str) -> str:
 
 def _validate_timezone(value: str) -> str:
     timezone_name = value.strip() or "UTC"
+    offset_match = re.fullmatch(r"UTC(?:([+-])(\d{2}):(\d{2}))?", timezone_name)
+    if offset_match:
+        if timezone_name == "UTC":
+            return timezone_name
+        sign, hours_raw, minutes_raw = offset_match.groups()
+        hours = int(hours_raw)
+        minutes = int(minutes_raw)
+        total_minutes = hours * 60 + minutes
+        if sign == "-":
+            total_minutes *= -1
+        if -12 * 60 <= total_minutes <= 14 * 60 and minutes in {0, 30}:
+            return timezone_name
+        raise HTTPException(status_code=400, detail="Timezone offset must be in 30-minute steps between UTC-12:00 and UTC+14:00.")
     try:
         ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError:
-        raise HTTPException(status_code=400, detail="Timezone must be a valid IANA timezone, for example UTC or Asia/Kolkata.")
+        raise HTTPException(status_code=400, detail="Timezone must be UTC, a UTC+/-HH:MM offset, or a valid IANA timezone.")
     return timezone_name
 
 
@@ -986,13 +1263,23 @@ def _dispatch_scan_to_celery(scan: Scan) -> None:
     run_scan.apply_async(args=[str(scan.id), scan.url], task_id=str(scan.id))
 
 
-def _enqueue_scan(db: Session, *, url: str, user_id: Any, client_ip: str) -> Scan:
+def _enqueue_scan(
+    db: Session,
+    *,
+    url: str,
+    user_id: Any,
+    client_ip: str,
+    program_id: Any | None = None,
+    auth_profile_id: Any | None = None,
+) -> Scan:
     scan = Scan(
         url=url,
         status=ScanStatus.PENDING,
         progress_step=0,
         client_ip=client_ip,
         user_id=user_id,
+        program_id=program_id,
+        auth_profile_id=auth_profile_id,
     )
     db.add(scan)
     db.commit()
@@ -1018,7 +1305,7 @@ def _set_auth_cookie(response: Response, token: str) -> None:
         value=token,
         max_age=COOKIE_MAX_AGE,
         httponly=True,
-        samesite="strict",
+        samesite="lax",
         secure=(settings.ENVIRONMENT == "production"),
         domain=_auth_cookie_domain(),
         path="/",
@@ -1161,6 +1448,12 @@ async def health_check():
     checks["paid_beta_mode"] = "on" if settings.PAID_BETA_MODE else "off"
     checks["target_verification"] = "required" if settings.REQUIRE_TARGET_VERIFICATION else "optional"
     return HealthResponse(status=status, version="1.0.0", checks=checks)
+
+
+@app.get("/health", response_model=HealthResponse)
+async def root_health_check():
+    """Compatibility health check for Docker dev jobs."""
+    return await health_check()
 
 
 # ── Auth Endpoints ─────────────────────────────────────────────────
@@ -1390,7 +1683,7 @@ async def logout(response: Response):
         path="/",
         domain=_auth_cookie_domain(),
         httponly=True,
-        samesite="strict",
+        samesite="lax",
     )
     return {"message": "Logged out successfully."}
 
@@ -1687,6 +1980,488 @@ async def verify_scan_target(
     )
 
 
+# ── Bug Bounty Programs / Triage ──────────────────────────────────
+
+def _get_program_or_404(db: Session, program_id: str, current_user: User) -> Program:
+    try:
+        program_uuid = UUID(program_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid program ID format.")
+
+    query = db.query(Program).filter(Program.id == program_uuid)
+    if current_user.role != UserRole.ADMIN:
+        query = query.filter(Program.user_id == current_user.id)
+    program = query.first()
+    if not program:
+        raise HTTPException(status_code=404, detail="Program not found.")
+    return program
+
+
+def _get_auth_profile_or_404(db: Session, auth_profile_id: str, current_user: User) -> AuthProfile:
+    try:
+        auth_profile_uuid = UUID(auth_profile_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid auth profile ID format.")
+
+    query = db.query(AuthProfile).filter(AuthProfile.id == auth_profile_uuid)
+    if current_user.role != UserRole.ADMIN:
+        query = query.filter(AuthProfile.user_id == current_user.id)
+    profile = query.first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Auth profile not found.")
+    return profile
+
+
+def _scope_rule_matches_url(rule: ScopeRule, url: str) -> bool:
+    """Return whether a program scope rule applies to a validated URL."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    path = parsed.path or "/"
+    full_url = url.lower()
+    pattern = (rule.pattern or "").strip().lower().rstrip(".")
+    if not host or not pattern:
+        return False
+
+    if rule.asset_type == ScopeAssetType.DOMAIN:
+        normalized = pattern.removeprefix("https://").removeprefix("http://").split("/", 1)[0]
+        return host == normalized or host.endswith(f".{normalized}")
+    if rule.asset_type == ScopeAssetType.WILDCARD:
+        normalized = pattern.removeprefix("https://").removeprefix("http://").split("/", 1)[0]
+        return fnmatch.fnmatch(host, normalized)
+    if rule.asset_type == ScopeAssetType.URL:
+        return fnmatch.fnmatch(full_url, pattern)
+    if rule.asset_type == ScopeAssetType.PATH:
+        return fnmatch.fnmatch(path, pattern if pattern.startswith("/") else f"/{pattern}")
+    if rule.asset_type == ScopeAssetType.IP:
+        return host == pattern
+    if rule.asset_type == ScopeAssetType.CIDR:
+        try:
+            return ipaddress.ip_address(host) in ipaddress.ip_network(pattern, strict=False)
+        except ValueError:
+            return False
+    return False
+
+
+def _active_program_scope_rules(db: Session, program: Program) -> list[ScopeRule]:
+    return (
+        db.query(ScopeRule)
+        .filter(ScopeRule.program_id == program.id, ScopeRule.is_active == True)
+        .all()
+    )
+
+
+def _flatten_scope_tests(rules: list[ScopeRule], field: str) -> list[str]:
+    tests: list[str] = []
+    for rule in rules:
+        values = getattr(rule, field, None)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            text = str(value).strip()
+            if text and text not in tests:
+                tests.append(text)
+    return tests
+
+
+def _preview_program_scope(db: Session, program: Program, url: str) -> ScopePreviewResponse:
+    rules = _active_program_scope_rules(db, program)
+    in_scope_rules = [rule for rule in rules if rule.rule_type == ScopeRuleType.IN_SCOPE]
+    out_of_scope_rules = [rule for rule in rules if rule.rule_type == ScopeRuleType.OUT_OF_SCOPE]
+    matched_in_scope = [rule for rule in in_scope_rules if _scope_rule_matches_url(rule, url)]
+    matched_out_of_scope = [rule for rule in out_of_scope_rules if _scope_rule_matches_url(rule, url)]
+
+    if not in_scope_rules:
+        status = "blocked_no_scope"
+        message = "Add at least one active in-scope rule before running a program-gated scan."
+    elif matched_out_of_scope:
+        status = "blocked_out_of_scope"
+        message = "This target matches an out-of-scope rule."
+    elif not matched_in_scope:
+        status = "blocked_not_in_scope"
+        message = "This target does not match any active in-scope rule."
+    else:
+        status = "allowed"
+        message = "This target is allowed by the selected program scope."
+
+    return ScopePreviewResponse(
+        url=url,
+        program_id=str(program.id),
+        status=status,
+        allowed=status == "allowed",
+        message=message,
+        matched_in_scope_rules=[_scope_rule_to_response(rule) for rule in matched_in_scope],
+        matched_out_of_scope_rules=[_scope_rule_to_response(rule) for rule in matched_out_of_scope],
+        allowed_tests=_flatten_scope_tests(matched_in_scope, "allowed_tests"),
+        forbidden_tests=[
+            *_flatten_scope_tests(matched_in_scope, "forbidden_tests"),
+            *_flatten_scope_tests(matched_out_of_scope, "forbidden_tests"),
+        ],
+    )
+
+
+def _enforce_program_scope(db: Session, program: Program, url: str) -> None:
+    """Block bug-bounty scans that fall outside the selected program scope."""
+    preview = _preview_program_scope(db, program, url)
+    if preview.status == "blocked_no_scope":
+        raise HTTPException(
+            status_code=400,
+            detail=preview.message,
+        )
+    if not preview.allowed:
+        raise HTTPException(status_code=403, detail=preview.message)
+
+
+def _build_release_gate(db: Session, program: Program) -> ReleaseGateResponse:
+    blocking_statuses = {
+        FindingStatus.NEW,
+        FindingStatus.TRIAGED,
+        FindingStatus.ACCEPTED,
+        FindingStatus.REGRESSED,
+    }
+    blockers: list[str] = []
+    warnings: list[str] = []
+    counts = {
+        "critical_blocking": 0,
+        "high_blocking": 0,
+        "medium_open": 0,
+        "failed_scans": 0,
+        "active_in_scope_rules": 0,
+    }
+
+    active_in_scope_count = (
+        db.query(func.count(ScopeRule.id))
+        .filter(
+            ScopeRule.program_id == program.id,
+            ScopeRule.is_active == True,
+            ScopeRule.rule_type == ScopeRuleType.IN_SCOPE,
+        )
+        .scalar()
+        or 0
+    )
+    counts["active_in_scope_rules"] = int(active_in_scope_count)
+    if active_in_scope_count == 0:
+        blockers.append("No active in-scope rules are configured.")
+
+    findings = (
+        db.query(Finding)
+        .filter(Finding.program_id == program.id, Finding.status.in_(blocking_statuses))
+        .all()
+    )
+    for finding in findings:
+        severity = finding.severity
+        label = f"{severity.value}: {finding.title}"
+        if severity == FindingSeverity.CRITICAL:
+            counts["critical_blocking"] += 1
+            blockers.append(label)
+        elif severity == FindingSeverity.HIGH:
+            counts["high_blocking"] += 1
+            blockers.append(label)
+        elif severity == FindingSeverity.MEDIUM:
+            counts["medium_open"] += 1
+            warnings.append(label)
+
+    failed_scan_count = (
+        db.query(func.count(Scan.id))
+        .filter(Scan.program_id == program.id, Scan.status == ScanStatus.FAILED)
+        .scalar()
+        or 0
+    )
+    counts["failed_scans"] = int(failed_scan_count)
+    if failed_scan_count:
+        warnings.append(f"{failed_scan_count} program scan(s) failed and may need a rerun.")
+
+    status = "block" if blockers else ("warn" if warnings else "pass")
+    return ReleaseGateResponse(
+        program_id=str(program.id),
+        status=status,
+        blockers=blockers[:20],
+        warnings=warnings[:20],
+        counts=counts,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+@app.get("/api/programs", response_model=List[ProgramResponse])
+async def list_programs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List bug bounty programs owned by the current user."""
+    programs = (
+        db.query(Program)
+        .filter(Program.user_id == current_user.id)
+        .order_by(Program.created_at.desc())
+        .all()
+    )
+    return [_program_to_response(program) for program in programs]
+
+
+@app.post("/api/programs", response_model=ProgramResponse)
+async def create_program(
+    body: ProgramCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a bug bounty program container for scoped recon and triage."""
+    handle = (body.handle or "").strip().lower() or None
+    if handle:
+        existing = (
+            db.query(Program)
+            .filter(Program.user_id == current_user.id, Program.handle == handle)
+            .first()
+        )
+        if existing:
+            raise HTTPException(status_code=409, detail="A program with this handle already exists.")
+
+    program = Program(
+        user_id=current_user.id,
+        name=body.name.strip(),
+        handle=handle,
+        safe_harbor=body.safe_harbor,
+        notes=body.notes,
+        scan_intensity=body.scan_intensity.strip().lower() or "standard",
+        is_active=body.is_active,
+    )
+    db.add(program)
+    db.commit()
+    db.refresh(program)
+    return _program_to_response(program)
+
+
+@app.get("/api/programs/{program_id}/auth-profiles", response_model=List[AuthProfileResponse])
+async def list_program_auth_profiles(
+    program_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List reusable authenticated-scan profiles for a program."""
+    program = _get_program_or_404(db, program_id, current_user)
+    profiles = (
+        db.query(AuthProfile)
+        .filter(AuthProfile.program_id == program.id)
+        .order_by(AuthProfile.created_at.desc())
+        .all()
+    )
+    return [_auth_profile_to_response(profile) for profile in profiles]
+
+
+@app.post("/api/programs/{program_id}/auth-profiles", response_model=AuthProfileResponse)
+async def create_program_auth_profile(
+    program_id: str,
+    body: AuthProfileCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create an encrypted authenticated-scanning profile for a program."""
+    program = _get_program_or_404(db, program_id, current_user)
+    name = body.name.strip()
+    existing = (
+        db.query(AuthProfile)
+        .filter(AuthProfile.program_id == program.id, AuthProfile.name == name)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="An auth profile with this name already exists.")
+
+    try:
+        headers = sanitize_auth_headers(body.headers)
+    except AuthProfileError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    profile = AuthProfile(
+        user_id=current_user.id,
+        program_id=program.id,
+        name=name,
+        description=body.description,
+        encrypted_headers=encrypt_auth_headers(headers),
+        header_names=auth_header_names(headers),
+        is_active=body.is_active,
+    )
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return _auth_profile_to_response(profile)
+
+
+@app.delete("/api/auth-profiles/{auth_profile_id}", status_code=204)
+async def delete_auth_profile(
+    auth_profile_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete an auth profile without exposing the stored secret material."""
+    profile = _get_auth_profile_or_404(db, auth_profile_id, current_user)
+    db.delete(profile)
+    db.commit()
+    return Response(status_code=204)
+
+
+@app.get("/api/programs/{program_id}/scope", response_model=List[ScopeRuleResponse])
+async def list_program_scope(
+    program_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List in-scope and out-of-scope rules for a program."""
+    program = _get_program_or_404(db, program_id, current_user)
+    rules = (
+        db.query(ScopeRule)
+        .filter(ScopeRule.program_id == program.id)
+        .order_by(ScopeRule.rule_type.asc(), ScopeRule.created_at.desc())
+        .all()
+    )
+    return [_scope_rule_to_response(rule) for rule in rules]
+
+
+@app.post("/api/programs/{program_id}/scope-preview", response_model=ScopePreviewResponse)
+async def preview_program_scope(
+    program_id: str,
+    body: ScopePreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Preview whether a URL is allowed by a program's active scope rules."""
+    program = _get_program_or_404(db, program_id, current_user)
+    try:
+        validated_url = validate_url(body.url)
+    except URLValidationError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    return _preview_program_scope(db, program, validated_url)
+
+
+@app.get("/api/programs/{program_id}/release-gate", response_model=ReleaseGateResponse)
+async def get_program_release_gate(
+    program_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return a PASS/WARN/BLOCK release gate decision for a program."""
+    program = _get_program_or_404(db, program_id, current_user)
+    return _build_release_gate(db, program)
+
+
+@app.post("/api/programs/{program_id}/scope", response_model=ScopeRuleResponse)
+async def create_program_scope_rule(
+    program_id: str,
+    body: ScopeRuleCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Add a scope rule to a bug bounty program."""
+    program = _get_program_or_404(db, program_id, current_user)
+    rule = ScopeRule(
+        program_id=program.id,
+        rule_type=ScopeRuleType(body.rule_type),
+        asset_type=ScopeAssetType(body.asset_type),
+        pattern=body.pattern.strip(),
+        description=body.description,
+        allowed_tests=body.allowed_tests,
+        forbidden_tests=body.forbidden_tests,
+        is_active=body.is_active,
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return _scope_rule_to_response(rule)
+
+
+@app.get("/api/assets", response_model=List[AssetResponse])
+async def list_assets(
+    program_id: str | None = Query(default=None),
+    asset_type: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List discovered assets from scans and recon."""
+    query = db.query(Asset).filter(Asset.user_id == current_user.id)
+    if program_id:
+        program = _get_program_or_404(db, program_id, current_user)
+        query = query.filter(Asset.program_id == program.id)
+    if asset_type:
+        try:
+            query = query.filter(Asset.asset_type == AssetType(asset_type))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid asset_type filter.")
+    assets = query.order_by(Asset.last_seen_at.desc()).limit(limit).all()
+    return [_asset_to_response(asset) for asset in assets]
+
+
+@app.get("/api/findings", response_model=List[FindingResponse])
+async def list_findings(
+    status: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    program_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List persistent findings for triage."""
+    query = db.query(Finding).filter(Finding.user_id == current_user.id)
+    if status:
+        try:
+            query = query.filter(Finding.status == FindingStatus(status))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid status filter.")
+    if severity:
+        try:
+            query = query.filter(Finding.severity == FindingSeverity(severity))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid severity filter.")
+    if program_id:
+        program = _get_program_or_404(db, program_id, current_user)
+        query = query.filter(Finding.program_id == program.id)
+    findings = query.order_by(Finding.last_seen_at.desc()).limit(limit).all()
+    return [_finding_to_response(finding) for finding in findings]
+
+
+@app.get("/api/findings/{finding_id}/evidence", response_model=List[EvidenceResponse])
+async def list_finding_evidence(
+    finding_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List stored evidence for a finding."""
+    try:
+        finding_uuid = UUID(finding_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid finding ID format.")
+    finding = db.query(Finding).filter(Finding.id == finding_uuid).first()
+    if not finding or (current_user.role != UserRole.ADMIN and finding.user_id != current_user.id):
+        raise HTTPException(status_code=404, detail="Finding not found.")
+    evidence_items = (
+        db.query(Evidence)
+        .filter(Evidence.finding_id == finding.id)
+        .order_by(Evidence.created_at.desc())
+        .all()
+    )
+    return [_evidence_to_response(item) for item in evidence_items]
+
+
+@app.patch("/api/findings/{finding_id}/status", response_model=FindingResponse)
+async def update_finding_status(
+    finding_id: str,
+    body: FindingStatusUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update a persistent finding's triage status."""
+    try:
+        finding_uuid = UUID(finding_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid finding ID format.")
+
+    finding = db.query(Finding).filter(Finding.id == finding_uuid).first()
+    if not finding or (current_user.role != UserRole.ADMIN and finding.user_id != current_user.id):
+        raise HTTPException(status_code=404, detail="Finding not found.")
+
+    finding.status = FindingStatus(body.status)
+    finding.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(finding)
+    return _finding_to_response(finding)
+
+
 # ── Scan Endpoints ─────────────────────────────────────────────────
 
 @app.post("/api/scans", response_model=ScanCreateResponse)
@@ -1706,6 +2481,19 @@ async def create_scan(
     except URLValidationError as e:
         raise HTTPException(status_code=400, detail=e.message)
 
+    program = _get_program_or_404(db, body.program_id, current_user)
+    _enforce_program_scope(db, program, validated_url)
+    auth_profile = None
+    if body.auth_profile_id:
+        auth_profile = _get_auth_profile_or_404(db, body.auth_profile_id, current_user)
+        if auth_profile.program_id != program.id:
+            raise HTTPException(status_code=400, detail="Auth profile does not belong to the selected program.")
+        if not auth_profile.is_active:
+            raise HTTPException(status_code=400, detail="Auth profile is inactive.")
+        try:
+            decrypt_auth_headers(auth_profile.encrypted_headers)
+        except AuthProfileError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     _enforce_target_authorization(db, current_user, validated_url)
     _enforce_user_scan_quota(db, current_user)
 
@@ -1713,7 +2501,14 @@ async def create_scan(
     client_ip = _get_client_ip(request)
     _check_rate_limit(client_ip)
 
-    scan = _enqueue_scan(db, url=validated_url, user_id=current_user.id, client_ip=client_ip)
+    scan = _enqueue_scan(
+        db,
+        url=validated_url,
+        user_id=current_user.id,
+        client_ip=client_ip,
+        program_id=program.id,
+        auth_profile_id=auth_profile.id if auth_profile else None,
+    )
     _increment_rate_limit(client_ip)
 
     scan_id = str(scan.id)
@@ -2223,11 +3018,17 @@ async def get_scan_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return real dashboard aggregates from the current user's scans."""
+    """Return dashboard aggregates, preferring persistent triage findings."""
     scans = (
         db.query(Scan)
         .filter(Scan.user_id == current_user.id)
         .order_by(Scan.created_at.desc())
+        .all()
+    )
+    persisted_findings = (
+        db.query(Finding)
+        .filter(Finding.user_id == current_user.id)
+        .order_by(Finding.last_seen_at.desc())
         .all()
     )
 
@@ -2242,6 +3043,28 @@ async def get_scan_dashboard(
     asset_counts: dict[str, int] = {}
     day_counts: dict[str, dict[str, int]] = {}
     risk_scores: list[int] = []
+    persisted_counts_by_scan: dict[str, int] = {}
+
+    for finding in persisted_findings:
+        severity = finding.severity.value if isinstance(finding.severity, FindingSeverity) else str(finding.severity)
+        if severity not in severity_counts:
+            severity = "info"
+        severity_counts[severity] += 1
+
+        category = (finding.category or "Uncategorized").strip() or "Uncategorized"
+        category_counts[category] = category_counts.get(category, 0) + 1
+
+        affected = (finding.affected or "").strip()
+        if affected:
+            asset_counts[affected] = asset_counts.get(affected, 0) + 1
+
+        if finding.scan_id:
+            scan_key = str(finding.scan_id)
+            persisted_counts_by_scan[scan_key] = persisted_counts_by_scan.get(scan_key, 0) + 1
+
+        day_key = finding.last_seen_at.date().isoformat()
+        day_counts.setdefault(day_key, {"scans": 0, "findings": 0})
+        day_counts[day_key]["findings"] += 1
 
     for scan in scans:
         day_key = scan.created_at.date().isoformat()
@@ -2254,28 +3077,30 @@ async def get_scan_dashboard(
             risk_scores.append(risk_score)
 
         findings = report.get("findings") if isinstance(report.get("findings"), list) else []
-        day_counts[day_key]["findings"] += len(findings)
+        if str(scan.id) not in persisted_counts_by_scan:
+            day_counts[day_key]["findings"] += len(findings)
 
-        for finding in findings:
-            if not isinstance(finding, dict):
-                continue
+            for finding in findings:
+                if not isinstance(finding, dict):
+                    continue
 
-            severity = str(finding.get("severity") or "info").lower()
-            if severity not in severity_counts:
-                severity = "info"
-            severity_counts[severity] += 1
+                severity = str(finding.get("severity") or "info").lower()
+                if severity not in severity_counts:
+                    severity = "info"
+                severity_counts[severity] += 1
 
-            category = str(finding.get("category") or "Uncategorized").strip() or "Uncategorized"
-            category_counts[category] = category_counts.get(category, 0) + 1
+                category = str(finding.get("category") or "Uncategorized").strip() or "Uncategorized"
+                category_counts[category] = category_counts.get(category, 0) + 1
 
-            affected = str(finding.get("affected") or scan.url).strip() or scan.url
-            asset_counts[affected] = asset_counts.get(affected, 0) + 1
+                affected = str(finding.get("affected") or scan.url).strip() or scan.url
+                asset_counts[affected] = asset_counts.get(affected, 0) + 1
 
     recent_scans = []
     for scan in scans:
         report = scan.report if isinstance(scan.report, dict) else {}
         findings = report.get("findings") if isinstance(report.get("findings"), list) else []
         risk_score = _coerce_risk_score(report.get("risk_score"))
+        findings_count = persisted_counts_by_scan.get(str(scan.id), len(findings))
 
         recent_scans.append(
             DashboardRecentScan(
@@ -2284,7 +3109,7 @@ async def get_scan_dashboard(
                 status=scan.status.value,
                 progress_step=scan.progress_step,
                 risk_score=risk_score,
-                findings_count=len(findings),
+                findings_count=findings_count,
                 pdf_url=(f"/api/scans/{scan.id}/pdf" if scan.pdf_url else None),
                 created_at=scan.created_at.isoformat(),
             )
@@ -2352,6 +3177,8 @@ async def get_scan_status(
         report=scan.report,
         error=scan.error,
         pdf_url=(f"/api/scans/{scan.id}/pdf" if scan.pdf_url else None),
+        program_id=str(scan.program_id) if scan.program_id else None,
+        auth_profile_id=str(scan.auth_profile_id) if scan.auth_profile_id else None,
         created_at=scan.created_at.isoformat(),
         user_id=str(scan.user_id) if scan.user_id else None,
     )
@@ -2380,6 +3207,8 @@ async def list_my_scans(
             report=None,  # Don't send full reports in list view
             error=s.error,
             pdf_url=(f"/api/scans/{s.id}/pdf" if s.pdf_url else None),
+            program_id=str(s.program_id) if s.program_id else None,
+            auth_profile_id=str(s.auth_profile_id) if s.auth_profile_id else None,
             created_at=s.created_at.isoformat(),
             user_id=str(s.user_id) if s.user_id else None,
         )

@@ -242,6 +242,8 @@ export interface ScanStatusResponse {
   report: ScanReport | null;
   error: string | null;
   pdf_url: string | null;
+  program_id: string | null;
+  auth_profile_id: string | null;
   created_at: string;
   user_id: string | null;
 }
@@ -286,6 +288,132 @@ export interface ScanDashboardResponse {
   top_assets: DashboardAssetCount[];
   scans_by_day: DashboardDayCount[];
   recent_scans: DashboardRecentScan[];
+}
+
+export interface Program {
+  id: string;
+  name: string;
+  handle: string | null;
+  safe_harbor: string | null;
+  notes: string | null;
+  scan_intensity: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProgramPayload {
+  name: string;
+  handle?: string | null;
+  safe_harbor?: string | null;
+  notes?: string | null;
+  scan_intensity?: string;
+  is_active?: boolean;
+}
+
+export interface ScopeRule {
+  id: string;
+  program_id: string;
+  rule_type: "in_scope" | "out_of_scope";
+  asset_type: "domain" | "wildcard" | "url" | "ip" | "cidr" | "path";
+  pattern: string;
+  description: string | null;
+  allowed_tests: string[] | null;
+  forbidden_tests: string[] | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ScopeRulePayload {
+  rule_type: "in_scope" | "out_of_scope";
+  asset_type?: "domain" | "wildcard" | "url" | "ip" | "cidr" | "path";
+  pattern: string;
+  description?: string | null;
+  allowed_tests?: string[] | null;
+  forbidden_tests?: string[] | null;
+  is_active?: boolean;
+}
+
+export interface AuthProfile {
+  id: string;
+  program_id: string;
+  name: string;
+  description: string | null;
+  header_names: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthProfilePayload {
+  name: string;
+  description?: string | null;
+  headers: Record<string, string>;
+  is_active?: boolean;
+}
+
+export interface Asset {
+  id: string;
+  value: string;
+  asset_type: string;
+  source: string;
+  metadata_json: Record<string, unknown> | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  scan_id: string | null;
+  program_id: string | null;
+}
+
+export interface PersistentFinding {
+  id: string;
+  title: string;
+  category: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  status: "new" | "triaged" | "accepted" | "duplicate" | "false_positive" | "fixed" | "regressed";
+  affected: string;
+  evidence_summary: string | null;
+  what_it_means: string | null;
+  remediation: string[] | null;
+  fix_prompt: string | null;
+  source: string;
+  dedupe_key: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  scan_id: string | null;
+  asset_id: string | null;
+  program_id: string | null;
+}
+
+export interface Evidence {
+  id: string;
+  finding_id: string;
+  evidence_type: string;
+  title: string;
+  content: string | null;
+  storage_url: string | null;
+  raw_json: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ScopePreview {
+  url: string;
+  program_id: string;
+  status: "allowed" | "blocked_no_scope" | "blocked_out_of_scope" | "blocked_not_in_scope";
+  allowed: boolean;
+  message: string;
+  matched_in_scope_rules: ScopeRule[];
+  matched_out_of_scope_rules: ScopeRule[];
+  allowed_tests: string[];
+  forbidden_tests: string[];
+}
+
+export interface ReleaseGate {
+  program_id: string;
+  status: "pass" | "warn" | "block";
+  blockers: string[];
+  warnings: string[];
+  counts: Record<string, number>;
+  generated_at: string;
 }
 
 export interface ScanEventMessage {
@@ -469,10 +597,10 @@ export async function verifyScanTarget(targetId: string): Promise<ScanTargetVeri
 
 // ── Scan API ─────────────────────────────────────────────────────
 
-export async function createScan(url: string): Promise<ScanCreateResponse> {
+export async function createScan(url: string, programId: string, authProfileId?: string | null): Promise<ScanCreateResponse> {
   return apiFetch<ScanCreateResponse>("/api/scans", {
     method: "POST",
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, program_id: programId, auth_profile_id: authProfileId || null }),
   });
 }
 
@@ -486,6 +614,84 @@ export async function listMyScans(): Promise<ScanStatusResponse[]> {
 
 export async function getScanDashboard(): Promise<ScanDashboardResponse> {
   return apiFetch<ScanDashboardResponse>("/api/scans/dashboard");
+}
+
+export async function listPrograms(): Promise<Program[]> {
+  return apiFetch<Program[]>("/api/programs");
+}
+
+export async function createProgram(payload: ProgramPayload): Promise<Program> {
+  return apiFetch<Program>("/api/programs", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listAuthProfiles(programId: string): Promise<AuthProfile[]> {
+  return apiFetch<AuthProfile[]>(`/api/programs/${programId}/auth-profiles`);
+}
+
+export async function createAuthProfile(programId: string, payload: AuthProfilePayload): Promise<AuthProfile> {
+  return apiFetch<AuthProfile>(`/api/programs/${programId}/auth-profiles`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAuthProfile(authProfileId: string): Promise<void> {
+  await apiFetch(`/api/auth-profiles/${authProfileId}`, { method: "DELETE" });
+}
+
+export async function listProgramScope(programId: string): Promise<ScopeRule[]> {
+  return apiFetch<ScopeRule[]>(`/api/programs/${programId}/scope`);
+}
+
+export async function createProgramScopeRule(programId: string, payload: ScopeRulePayload): Promise<ScopeRule> {
+  return apiFetch<ScopeRule>(`/api/programs/${programId}/scope`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function previewProgramScope(programId: string, url: string): Promise<ScopePreview> {
+  return apiFetch<ScopePreview>(`/api/programs/${programId}/scope-preview`, {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export async function getProgramReleaseGate(programId: string): Promise<ReleaseGate> {
+  return apiFetch<ReleaseGate>(`/api/programs/${programId}/release-gate`);
+}
+
+export async function listAssets(params: { program_id?: string; asset_type?: string; limit?: number } = {}): Promise<Asset[]> {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+  });
+  return apiFetch<Asset[]>(`/api/assets${search.size ? `?${search.toString()}` : ""}`);
+}
+
+export async function listFindings(params: { status?: string; severity?: string; program_id?: string; limit?: number } = {}): Promise<PersistentFinding[]> {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+  });
+  return apiFetch<PersistentFinding[]>(`/api/findings${search.size ? `?${search.toString()}` : ""}`);
+}
+
+export async function listFindingEvidence(findingId: string): Promise<Evidence[]> {
+  return apiFetch<Evidence[]>(`/api/findings/${findingId}/evidence`);
+}
+
+export async function updateFindingStatus(
+  findingId: string,
+  status: PersistentFinding["status"]
+): Promise<PersistentFinding> {
+  return apiFetch<PersistentFinding>(`/api/findings/${findingId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
 }
 
 export async function listSchedules(): Promise<ScheduledScan[]> {

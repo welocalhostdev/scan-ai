@@ -1,0 +1,60 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "ScanAI Command desk" [ref=e5] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e6]:
+            - paragraph [ref=e7]: ScanAI
+            - paragraph [ref=e8]: Command desk
+        - navigation "Primary" [ref=e9]:
+          - link "Dashboard" [ref=e10] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e11]
+            - text: Dashboard
+          - link "Surface" [ref=e14] [cursor=pointer]:
+            - /url: /dashboard?view=surface
+            - img [ref=e15]
+            - text: Surface
+          - link "Programs" [ref=e25] [cursor=pointer]:
+            - /url: /dashboard?view=programs
+            - img [ref=e26]
+            - text: Programs
+          - link "Findings" [ref=e29] [cursor=pointer]:
+            - /url: /dashboard?view=findings
+            - img [ref=e30]
+            - text: Findings
+          - link "Reports" [ref=e32] [cursor=pointer]:
+            - /url: /dashboard?view=reports
+            - img [ref=e33]
+            - text: Reports
+          - link "Agents" [ref=e36] [cursor=pointer]:
+            - /url: /dashboard?view=agents
+            - img [ref=e37]
+            - text: Agents
+        - generic [ref=e40]:
+          - link "Live activity" [ref=e41] [cursor=pointer]:
+            - /url: /dashboard?view=programs&panel=activity
+            - img [ref=e42]
+          - link "API radar" [ref=e44] [cursor=pointer]:
+            - /url: /dashboard?view=programs&panel=radar
+            - img [ref=e45]
+          - link "Notifications" [ref=e52] [cursor=pointer]:
+            - /url: /dashboard?view=programs&panel=notifications
+            - img [ref=e53]
+          - link "Settings" [ref=e56] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e57]
+          - link "H Himanshu himanshudubey2401@gmail.com" [ref=e60] [cursor=pointer]:
+            - /url: /dashboard?view=programs&panel=account
+            - generic [ref=e62]: H
+            - generic [ref=e63]:
+              - paragraph [ref=e64]: Himanshu
+              - paragraph [ref=e65]: himanshudubey2401@gmail.com
+            - img [ref=e66]
+          - button "Log out" [ref=e68]:
+            - img [ref=e69]
+    - main [ref=e72]
+  - button "Open Next.js Dev Tools" [ref=e88] [cursor=pointer]:
+    - img [ref=e89]
+  - alert [ref=e92]

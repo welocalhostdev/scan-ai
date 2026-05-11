@@ -33,6 +33,8 @@ def init_db() -> None:
     """Create all database tables if they don't exist."""
     Base.metadata.create_all(bind=engine)
     _ensure_user_account_columns()
+    _ensure_scan_program_columns()
+    _ensure_scan_auth_profile_columns()
 
 
 def _ensure_user_account_columns() -> None:
@@ -66,6 +68,40 @@ def _ensure_user_account_columns() -> None:
     if "schedule_limit" not in existing_columns:
         statements.append(f"ALTER TABLE users ADD COLUMN schedule_limit INTEGER DEFAULT {settings.BETA_SCHEDULE_LIMIT} NOT NULL")
     statements.append("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users (google_sub) WHERE google_sub IS NOT NULL")
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def _ensure_scan_program_columns() -> None:
+    """Add bug-bounty program linkage to existing scan tables."""
+    inspector = inspect(engine)
+    if "scans" not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("scans")}
+    statements = []
+    if "program_id" not in existing_columns:
+        statements.append("ALTER TABLE scans ADD COLUMN program_id UUID")
+        statements.append("CREATE INDEX IF NOT EXISTS ix_scans_program_id ON scans (program_id)")
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def _ensure_scan_auth_profile_columns() -> None:
+    """Add authenticated-scan linkage to existing scan tables."""
+    inspector = inspect(engine)
+    if "scans" not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("scans")}
+    statements = []
+    if "auth_profile_id" not in existing_columns:
+        statements.append("ALTER TABLE scans ADD COLUMN auth_profile_id UUID")
+        statements.append("CREATE INDEX IF NOT EXISTS ix_scans_auth_profile_id ON scans (auth_profile_id)")
 
     with engine.begin() as connection:
         for statement in statements:

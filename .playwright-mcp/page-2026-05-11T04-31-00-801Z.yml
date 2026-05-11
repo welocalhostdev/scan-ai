@@ -1,0 +1,359 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "ScanAI" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: ScanAI
+        - button "Toggle navigation" [ref=e8]:
+          - img [ref=e9]
+    - main [ref=e11]:
+      - generic [ref=e14]:
+        - heading "Scan your attack surface. Ship fixes faster." [level=1] [ref=e15]
+        - paragraph [ref=e16]: ScanAI maps reachable assets, detects exposed services and API risks, then turns findings into clear remediation reports for engineering teams.
+        - generic [ref=e17]:
+          - link "Start scanning »" [ref=e18] [cursor=pointer]:
+            - /url: /signup
+            - text: Start scanning
+            - generic [ref=e19]: »
+          - link "Continue with Google" [ref=e20] [cursor=pointer]:
+            - /url: /api/auth/google/start?next=%2Fdashboard
+            - img [ref=e22]
+            - text: Continue with Google
+        - paragraph [ref=e27]: Built for teams that need external security visibility without manual scanner cleanup
+      - generic [ref=e29]:
+        - generic [ref=e30]: External scans
+        - generic [ref=e31]: API discovery
+        - generic [ref=e32]: Risk reports
+        - generic [ref=e33]: AI triage
+        - generic [ref=e34]: Fix prompts
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: AI triage
+          - heading "Scanner noise slows real security work." [level=2] [ref=e43]
+          - paragraph [ref=e44]: ScanAI turns raw scanner output into retained evidence, risk context, and engineer-ready remediation without another cleanup spreadsheet.
+          - generic [ref=e45]:
+            - generic [ref=e46]:
+              - paragraph [ref=e47]: "247"
+              - paragraph [ref=e48]: raw signals
+            - generic [ref=e49]:
+              - paragraph [ref=e50]: "27"
+              - paragraph [ref=e51]: retained findings
+            - generic [ref=e52]:
+              - paragraph [ref=e53]: "1"
+              - paragraph [ref=e54]: handoff
+        - generic [ref=e58]:
+          - article [ref=e59]:
+            - generic [ref=e60]:
+              - img [ref=e62]
+              - generic [ref=e65]:
+                - generic [ref=e66]:
+                  - generic [ref=e67]: "01"
+                  - generic [ref=e68]: Scanner output
+                - heading "Hundreds of events land without context." [level=3] [ref=e69]
+                - paragraph [ref=e70]: Routes, headers, status codes, templates, and scanner notes arrive as disconnected fragments.
+              - generic [ref=e71]: 247 raw signals
+          - article [ref=e72]:
+            - generic [ref=e73]:
+              - img [ref=e75]
+              - generic [ref=e80]:
+                - generic [ref=e81]:
+                  - generic [ref=e82]: "02"
+                  - generic [ref=e83]: Evidence grouping
+                - heading "ScanAI keeps only the retained proof." [level=3] [ref=e84]
+                - paragraph [ref=e85]: Reachable assets, duplicated findings, and low-value noise are grouped into a reviewable risk story.
+              - generic [ref=e86]: 27 retained findings
+          - article [ref=e87]:
+            - generic [ref=e88]:
+              - img [ref=e90]
+              - generic [ref=e92]:
+                - generic [ref=e93]:
+                  - generic [ref=e94]: "03"
+                  - generic [ref=e95]: Risk handoff
+                - heading "Engineers get the why, where, and fix." [level=3] [ref=e96]
+                - paragraph [ref=e97]: Every report includes affected assets, priority, evidence, and remediation prompts that can become tickets.
+              - generic [ref=e98]: 1 clean handoff
+      - generic [ref=e100]:
+        - generic [ref=e101]:
+          - paragraph [ref=e102]: 12x
+          - paragraph [ref=e103]: faster first-pass triage
+        - generic [ref=e104]:
+          - paragraph [ref=e105]: "8"
+          - paragraph [ref=e106]: scanner stages coordinated
+        - generic [ref=e107]:
+          - paragraph [ref=e108]: "1"
+          - paragraph [ref=e109]: shareable remediation report
+        - generic [ref=e110]:
+          - paragraph [ref=e111]: 24/7
+          - paragraph [ref=e112]: external exposure visibility
+      - generic [ref=e116]:
+        - heading "From target URL to prioritized report." [level=2] [ref=e117]
+        - paragraph [ref=e118]: ScanAI runs reconnaissance, probes reachable services, groups evidence, and produces engineering-ready remediation guidance.
+        - link "Start scanning »" [ref=e119] [cursor=pointer]:
+          - /url: /signup
+          - text: Start scanning
+          - generic [ref=e120]: »
+      - generic [ref=e122]:
+        - generic [ref=e123]:
+          - paragraph [ref=e124]: Report Output
+          - heading "Evidence your engineers can act on." [level=2] [ref=e125]
+          - paragraph [ref=e126]: "Every completed scan keeps the important context together: severity, affected asset, scanner evidence, risk explanation, and remediation steps."
+        - generic [ref=e127]:
+          - generic [ref=e128]:
+            - generic [ref=e129]:
+              - paragraph [ref=e130]: Scan report
+              - paragraph [ref=e131]: https://scanai.welocalhost.com
+            - generic [ref=e132]: 27 findings
+          - generic [ref=e133]:
+            - generic [ref=e134]:
+              - generic [ref=e135]: Critical
+              - generic [ref=e136]:
+                - heading "Exposed admin route" [level=3] [ref=e137]
+                - paragraph [ref=e138]: Unauthenticated route reachable from public internet
+            - generic [ref=e139]:
+              - generic [ref=e140]: High
+              - generic [ref=e141]:
+                - heading "Weak TLS posture" [level=3] [ref=e142]
+                - paragraph [ref=e143]: Deprecated cipher accepted by public endpoint
+            - generic [ref=e144]:
+              - generic [ref=e145]: Medium
+              - generic [ref=e146]:
+                - heading "Missing security headers" [level=3] [ref=e147]
+                - paragraph [ref=e148]: HSTS and CSP hardening recommended
+            - generic [ref=e149]:
+              - generic [ref=e150]: Low
+              - generic [ref=e151]:
+                - heading "Informational leakage" [level=3] [ref=e152]
+                - paragraph [ref=e153]: Server metadata exposed in response headers
+      - generic [ref=e154]:
+        - generic [ref=e155]:
+          - heading "The AI security stack" [level=2] [ref=e156]
+          - paragraph [ref=e157]: ScanAI takes a different approach to security scanning, with AI accelerating every step from discovery to remediation.
+        - generic [ref=e158]:
+          - article [ref=e159]:
+            - img [ref=e161]
+            - heading "Attack surface mapping" [level=3] [ref=e168]
+            - paragraph [ref=e169]: Find domains, hosts, routes, ports, TLS issues, headers, and API signals from a single target.
+          - article [ref=e170]:
+            - img [ref=e172]
+            - heading "AI triage and grouping" [level=3] [ref=e175]
+            - paragraph [ref=e176]: Collapse noisy scanner output into a clean queue organized by exploitability and business impact.
+          - article [ref=e177]:
+            - img [ref=e179]
+            - heading "Engineer-ready reports" [level=3] [ref=e182]
+            - paragraph [ref=e183]: Generate remediation notes with evidence, affected assets, severity, and focused fix prompts.
+          - article [ref=e184]:
+            - img [ref=e186]
+            - heading "Continuous monitoring" [level=3] [ref=e190]
+            - paragraph [ref=e191]: Keep external exposure visible as your product, infrastructure, and dependencies change.
+      - generic [ref=e193]:
+        - generic [ref=e194]:
+          - generic [ref=e195]:
+            - paragraph [ref=e196]: Coverage
+            - heading "One scan, multiple security passes." [level=2] [ref=e197]
+          - paragraph [ref=e198]: ScanAI coordinates discovery, probing, vulnerability checks, and AI summarization so you get a cleaner result than running each tool in isolation.
+        - generic [ref=e199]:
+          - paragraph [ref=e201]: Subdomain discovery
+          - paragraph [ref=e203]: Live host probing
+          - paragraph [ref=e205]: Port scanning
+          - paragraph [ref=e207]: Endpoint crawling
+          - paragraph [ref=e209]: TLS review
+          - paragraph [ref=e211]: Header analysis
+          - paragraph [ref=e213]: API route detection
+          - paragraph [ref=e215]: XSS checks
+          - paragraph [ref=e217]: Nuclei templates
+          - paragraph [ref=e219]: AI report generation
+      - generic [ref=e220]:
+        - generic [ref=e221]:
+          - heading "Configure scans around your risk." [level=2] [ref=e222]
+          - paragraph [ref=e223]: Choose the modules that fit your target, add AI workflows, and send engineers a clean remediation queue.
+        - generic [ref=e224]:
+          - generic [ref=e225]:
+            - heading "1. Choose scan modules" [level=3] [ref=e226]
+            - generic [ref=e227]:
+              - generic [ref=e228]: CVE
+              - generic [ref=e230]: TLS
+              - generic [ref=e232]: Headers
+              - generic [ref=e234]: Ports
+              - generic [ref=e236]: API docs
+              - generic [ref=e238]: Crawling
+              - generic [ref=e240]: XSS
+              - generic [ref=e242]: Subdomains
+              - generic [ref=e244]: BOLA
+          - generic [ref=e246]:
+            - heading "2. Add AI workflows" [level=3] [ref=e247]
+            - generic [ref=e248]:
+              - generic [ref=e249]:
+                - generic [ref=e250]: AI
+                - generic [ref=e251]: Remediation prompt
+                - img [ref=e253]
+              - generic [ref=e255]:
+                - generic [ref=e256]: AI
+                - generic [ref=e257]: Evidence summary
+                - img [ref=e259]
+              - generic [ref=e261]:
+                - generic [ref=e262]: AI
+                - generic [ref=e263]: PDF report
+                - img [ref=e265]
+              - generic [ref=e267]:
+                - generic [ref=e268]: AI
+                - generic [ref=e269]: Risk scoring
+                - img [ref=e271]
+              - generic [ref=e273]:
+                - generic [ref=e274]: AI
+                - generic [ref=e275]: Asset grouping
+                - img [ref=e277]
+          - generic [ref=e279]:
+            - heading "3. Run the scan" [level=3] [ref=e280]
+            - paragraph [ref=e281]: Get prioritized issues, affected assets, and engineer-ready fixes in one workspace.
+            - link "Start scanning today" [ref=e282] [cursor=pointer]:
+              - /url: /signup
+      - generic [ref=e283]:
+        - generic [ref=e284]:
+          - heading "Built for every security stage" [level=2] [ref=e285]
+          - paragraph [ref=e286]: ScanAI eliminates vulnerability busywork whether you are running your first scan or managing a mature product security program.
+        - generic [ref=e287]:
+          - article [ref=e288]:
+            - img [ref=e290]
+            - heading "Startup" [level=3] [ref=e294]
+            - paragraph [ref=e295]: Launch a security program without hiring a full security team.
+            - list [ref=e297]:
+              - listitem [ref=e298]:
+                - img [ref=e300]
+                - text: External scan history
+              - listitem [ref=e302]:
+                - img [ref=e304]
+                - text: Prioritized fixes
+              - listitem [ref=e306]:
+                - img [ref=e308]
+                - text: Shareable PDF reports
+            - link "Start scanning »" [ref=e310] [cursor=pointer]:
+              - /url: /signup
+              - text: Start scanning
+              - generic [ref=e311]: »
+          - article [ref=e312]:
+            - img [ref=e314]
+            - heading "Midmarket" [level=3] [ref=e318]
+            - paragraph [ref=e319]: Replace scattered tools with one repeatable scanning workflow.
+            - list [ref=e321]:
+              - listitem [ref=e322]:
+                - img [ref=e324]
+                - text: API surface discovery
+              - listitem [ref=e326]:
+                - img [ref=e328]
+                - text: Remediation prompts
+              - listitem [ref=e330]:
+                - img [ref=e332]
+                - text: Historical risk posture
+            - link "Start scanning »" [ref=e334] [cursor=pointer]:
+              - /url: /signup
+              - text: Start scanning
+              - generic [ref=e335]: »
+          - article [ref=e336]:
+            - img [ref=e338]
+            - heading "Enterprise" [level=3] [ref=e342]
+            - paragraph [ref=e343]: Give product security teams a faster way to brief engineering.
+            - list [ref=e345]:
+              - listitem [ref=e346]:
+                - img [ref=e348]
+                - text: Asset-level evidence
+              - listitem [ref=e350]:
+                - img [ref=e352]
+                - text: Risk scoring
+              - listitem [ref=e354]:
+                - img [ref=e356]
+                - text: Continuous reconnaissance
+            - link "Start scanning »" [ref=e358] [cursor=pointer]:
+              - /url: /signup
+              - text: Start scanning
+              - generic [ref=e359]: »
+      - generic [ref=e361]:
+        - generic [ref=e362]:
+          - paragraph [ref=e363]: Questions
+          - heading "Built for practical security work." [level=2] [ref=e364]
+        - generic [ref=e365]:
+          - generic [ref=e366]:
+            - heading "What does ScanAI scan?" [level=3] [ref=e367]
+            - paragraph [ref=e368]: ScanAI starts from a target URL and maps reachable hosts, ports, routes, headers, TLS posture, API signals, and retained vulnerability evidence.
+          - generic [ref=e369]:
+            - heading "Is this a replacement for manual penetration testing?" [level=3] [ref=e370]
+            - paragraph [ref=e371]: No. It is designed for fast external reconnaissance, continuous monitoring, and remediation handoff. Manual testing is still important for authenticated and business-logic issues.
+          - generic [ref=e372]:
+            - heading "What does the AI do?" [level=3] [ref=e373]
+            - paragraph [ref=e374]: AI summarizes evidence, groups related findings, explains risk in plain English, and creates fix prompts that engineers can use in their local workflow.
+          - generic [ref=e375]:
+            - heading "Can I share reports?" [level=3] [ref=e376]
+            - paragraph [ref=e377]: Yes. Completed scans can produce structured reports and PDFs with severity, affected assets, evidence, and remediation steps.
+    - contentinfo [ref=e378]:
+      - generic [ref=e379]:
+        - generic [ref=e380]:
+          - img "ScanAI" [ref=e382]
+          - generic [ref=e383]:
+            - paragraph [ref=e384]: ScanAI Security Inc.
+            - paragraph [ref=e385]: Automated external security scanning for modern product teams.
+            - paragraph [ref=e386]: Find risk sooner. Fix what matters. Prove progress clearly.
+        - generic [ref=e387]:
+          - generic [ref=e388]:
+            - heading "Product" [level=3] [ref=e389]
+            - list [ref=e390]:
+              - listitem [ref=e391]:
+                - link "Attack surface" [ref=e392] [cursor=pointer]:
+                  - /url: /product/attack-surface
+              - listitem [ref=e393]:
+                - link "AI triage" [ref=e394] [cursor=pointer]:
+                  - /url: /product/ai-triage
+              - listitem [ref=e395]:
+                - link "Reports" [ref=e396] [cursor=pointer]:
+                  - /url: /product/reports
+              - listitem [ref=e397]:
+                - link "Continuous scans" [ref=e398] [cursor=pointer]:
+                  - /url: /product/continuous-scans
+          - generic [ref=e399]:
+            - heading "Teams" [level=3] [ref=e400]
+            - list [ref=e401]:
+              - listitem [ref=e402]:
+                - link "Startup" [ref=e403] [cursor=pointer]:
+                  - /url: /teams/startup
+              - listitem [ref=e404]:
+                - link "Midmarket" [ref=e405] [cursor=pointer]:
+                  - /url: /teams/midmarket
+              - listitem [ref=e406]:
+                - link "Enterprise" [ref=e407] [cursor=pointer]:
+                  - /url: /teams/enterprise
+              - listitem [ref=e408]:
+                - link "Agencies" [ref=e409] [cursor=pointer]:
+                  - /url: /teams/agencies
+          - generic [ref=e410]:
+            - heading "Resources" [level=3] [ref=e411]
+            - list [ref=e412]:
+              - listitem [ref=e413]:
+                - link "Security guide" [ref=e414] [cursor=pointer]:
+                  - /url: /resources/security-guide
+              - listitem [ref=e415]:
+                - link "API scanning" [ref=e416] [cursor=pointer]:
+                  - /url: /resources/api-scanning
+              - listitem [ref=e417]:
+                - link "Remediation playbook" [ref=e418] [cursor=pointer]:
+                  - /url: /resources/remediation-playbook
+              - listitem [ref=e419]:
+                - link "Docs" [ref=e420] [cursor=pointer]:
+                  - /url: /resources/docs
+          - generic [ref=e421]:
+            - heading "Ready to scan your attack surface?" [level=3] [ref=e422]
+            - paragraph [ref=e423]: Start with a target URL and get prioritized evidence your engineering team can use.
+            - link "Start scanning »" [ref=e424] [cursor=pointer]:
+              - /url: /signup
+              - text: Start scanning
+              - generic [ref=e425]: »
+      - generic [ref=e426]:
+        - paragraph [ref=e427]: © 2026 ScanAI. All rights reserved.
+        - generic [ref=e428]:
+          - link "Privacy Policy" [ref=e429] [cursor=pointer]:
+            - /url: /privacy
+          - link "Terms of Service" [ref=e430] [cursor=pointer]:
+            - /url: /terms
+          - link "Login" [ref=e431] [cursor=pointer]:
+            - /url: /login
+  - button "Open Next.js Dev Tools" [ref=e437] [cursor=pointer]:
+    - img [ref=e438]
+  - alert [ref=e441]

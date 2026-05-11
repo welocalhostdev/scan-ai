@@ -4,16 +4,33 @@ Orchestrates the 7-step scan process: subfinder → httpx → naabu → katana �
 """
 
 import asyncio
+import hashlib
 import logging
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from celery import Celery
 from celery.exceptions import SoftTimeLimitExceeded
 
 from config import settings
+from auth_profiles import AuthProfileError, decrypt_auth_headers
 from database import get_db_session
-from models import EmailDeliveryStatus, EmailNotification, Scan, ScanStatus, TokenUsage, User
+from models import (
+    Asset,
+    AssetType,
+    AuthProfile,
+    EmailDeliveryStatus,
+    EmailNotification,
+    Evidence,
+    EvidenceType,
+    Finding,
+    FindingSeverity,
+    Scan,
+    ScanStatus,
+    TokenUsage,
+    User,
+)
 from validators import extract_domain
 from scanner import (
     run_subfinder,
@@ -34,7 +51,7 @@ from scanner import (
     run_dalfox,
     cleanup_scan_files,
 )
-from ai import generate_report
+from ai import classify_attack_surface, generate_report
 from scan_events import publish_scan_event
 
 logger = logging.getLogger(__name__)
@@ -167,7 +184,398 @@ def _set_scan_failed(scan_id: str, error: str) -> None:
             logger.error(f"Scan {scan_id} failed: {error[:200]}")
 
 
-def _set_scan_complete(scan_id: str, report: dict) -> None:
+def _normalize_finding_severity(value: Any) -> FindingSeverity:
+    normalized = str(value or "info").lower()
+    for severity in FindingSeverity:
+        if severity.value == normalized:
+            return severity
+    return FindingSeverity.INFO
+
+
+def _finding_dedupe_key(user_id: Any, finding: dict[str, Any]) -> str:
+    raw = "|".join(
+        [
+            str(user_id),
+            str(finding.get("affected") or "").strip().lower(),
+            str(finding.get("title") or "").strip().lower(),
+            str(finding.get("category") or "other").strip().lower(),
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _asset_type_for_value(value: str) -> AssetType:
+    lowered = value.lower()
+    if lowered.startswith(("http://", "https://")):
+        if "/api" in lowered or "graphql" in lowered or "swagger" in lowered or "openapi" in lowered:
+            return AssetType.API
+        return AssetType.URL
+    if ":" in lowered and lowered.rsplit(":", 1)[-1].isdigit():
+        return AssetType.SERVICE
+    if lowered.count(".") >= 1:
+        return AssetType.SUBDOMAIN
+    return AssetType.OTHER
+
+
+def _surface_value_from_item(item: Any, keys: tuple[str, ...] = ("url", "host", "input", "endpoint", "matched-at")) -> str | None:
+    if isinstance(item, str):
+        value = item.strip()
+        return value or None
+    if not isinstance(item, dict):
+        return None
+    for key in keys:
+        value = item.get(key)
+        if value:
+            text = str(value).strip()
+            if text:
+                return text
+    request = item.get("request")
+    if isinstance(request, dict):
+        endpoint = request.get("endpoint")
+        if endpoint:
+            text = str(endpoint).strip()
+            if text:
+                return text
+    return None
+
+
+def _surface_path(value: str) -> str:
+    parsed = urlparse(value if value.startswith(("http://", "https://")) else f"https://{value}")
+    path = parsed.path or "/"
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{path}{query}"
+
+
+def _classify_surface(value: str, asset_type: AssetType, source: str, raw: Any | None = None) -> dict[str, Any]:
+    path = _surface_path(value)
+    haystack = f"{value} {path}".lower()
+    signals: list[str] = []
+    role = "route" if asset_type in {AssetType.URL, AssetType.API} else asset_type.value
+    label = "Discovered route" if role == "route" else "Discovered asset"
+    priority = "normal"
+    confidence = 0.55
+
+    def mark(next_role: str, next_label: str, signal: str, next_priority: str = "normal", next_confidence: float = 0.78) -> None:
+        nonlocal role, label, priority, confidence
+        if next_confidence >= confidence:
+            role = next_role
+            label = next_label
+            priority = next_priority
+            confidence = next_confidence
+        signals.append(signal)
+
+    if any(token in haystack for token in ("/login", "/signin", "/sign-in", "/auth", "/session", "/sso", "/oauth", "/callback")):
+        mark("login", "Likely login or SSO route", "authentication keyword", "high", 0.9)
+    if any(token in haystack for token in ("/admin", "/dashboard", "/console", "/manage", "/internal", "/staff", "/superuser")):
+        mark("admin", "Likely admin or privileged area", "admin keyword", "high", 0.88)
+    if any(token in haystack for token in ("/api", "/graphql", "/rpc", "/v1/", "/v2/", "/rest/")) or asset_type == AssetType.API:
+        mark("api", "API route", "API route pattern", "high" if role not in {"login", "admin"} else priority, 0.82)
+    if any(token in haystack for token in ("swagger", "openapi", "api-docs", "redoc", "/docs")):
+        mark("api_docs", "API documentation candidate", "API documentation keyword", "high", 0.86)
+    if any(token in haystack for token in ("/account", "/profile", "/settings", "/billing", "/checkout", "/payment")):
+        mark("sensitive_user_area", "Likely sensitive user workflow", "account or payment keyword", "high", 0.83)
+    if any(token in haystack for token in ("/upload", "/import", "/file", "/attachment")):
+        mark("file_upload", "Likely file upload/import route", "file handling keyword", "high", 0.82)
+    if any(token in haystack for token in ("/health", "/status", "/metrics", "/debug", "/actuator")):
+        mark("operational", "Operational endpoint", "operational keyword", "medium", 0.8)
+    if any(token in haystack for token in (".js", ".css", ".png", ".jpg", ".svg", ".woff", "/static/", "/assets/")):
+        mark("static", "Static asset", "static asset pattern", "low", 0.75)
+    if urlparse(value).query:
+        signals.append("query parameters present")
+        if role == "route":
+            label = "Parameterized route"
+            role = "parameterized"
+            priority = "medium"
+            confidence = max(confidence, 0.76)
+
+    status = raw.get("status") if isinstance(raw, dict) else None
+    if status in {401, 403}:
+        signals.append(f"access controlled status {status}")
+        if role == "route":
+            role = "access_controlled"
+            label = "Access-controlled route"
+            priority = "high"
+            confidence = max(confidence, 0.8)
+
+    parsed_query = parse_qs(urlparse(value).query)
+    return {
+        "surface_role": role,
+        "ai_label": label,
+        "ai_confidence": round(confidence, 2),
+        "priority": priority,
+        "signals": sorted(set(signals)),
+        "path": path,
+        "source": source,
+        "status": status,
+        "parameters": sorted(parsed_query.keys())[:20],
+    }
+
+
+def _upsert_discovered_asset(session, scan: Scan, value: str, asset_type: AssetType, source: str, metadata: dict[str, Any]) -> Asset | None:
+    if not scan.user_id or not value:
+        return None
+    now = datetime.now(timezone.utc)
+    asset = (
+        session.query(Asset)
+        .filter(
+            Asset.user_id == scan.user_id,
+            Asset.value == value,
+            Asset.asset_type == asset_type,
+        )
+        .first()
+    )
+    safe_metadata = {
+        **metadata,
+        "last_scan_id": str(scan.id),
+        "discovered_by": source,
+    }
+    if asset:
+        asset.last_seen_at = now
+        asset.scan_id = scan.id
+        asset.program_id = scan.program_id or asset.program_id
+        asset.source = asset.source or source
+        asset.metadata_json = {**(asset.metadata_json or {}), **safe_metadata}
+        return asset
+
+    asset = Asset(
+        user_id=scan.user_id,
+        program_id=scan.program_id,
+        scan_id=scan.id,
+        value=value,
+        asset_type=asset_type,
+        source=source,
+        metadata_json=safe_metadata,
+        first_seen_at=now,
+        last_seen_at=now,
+    )
+    session.add(asset)
+    session.flush()
+    return asset
+
+
+def _persist_discovered_surface(session, scan: Scan, scan_results: dict[str, Any] | None) -> None:
+    """Retain all useful routes/subdomains from recon with route intent labels."""
+    if not scan_results or not scan.user_id:
+        return
+
+    candidates: list[tuple[str, AssetType, str, Any]] = []
+    for item in scan_results.get("subdomains", []) or []:
+        value = _surface_value_from_item(item, ("host", "input", "url"))
+        if value:
+            candidates.append((value, AssetType.SUBDOMAIN, "subfinder", item))
+    for item in scan_results.get("dns_records", []) or []:
+        value = _surface_value_from_item(item, ("host", "input", "a", "aaaa"))
+        if value:
+            candidates.append((value, AssetType.SUBDOMAIN, "dnsx", item))
+    for item in scan_results.get("live_hosts", []) or []:
+        value = _surface_value_from_item(item, ("url", "host", "input"))
+        if value:
+            candidates.append((value, _asset_type_for_value(value), "httpx", item))
+    for item in scan_results.get("crawled_endpoints", []) or []:
+        value = _surface_value_from_item(item, ("url", "endpoint", "matched-at"))
+        if value:
+            candidates.append((value, _asset_type_for_value(value), "katana", item))
+    for item in scan_results.get("api_discovered_routes", []) or []:
+        value = _surface_value_from_item(item, ("url", "path"))
+        if value:
+            candidates.append((value, AssetType.API, "ffuf_api", item))
+    for item in scan_results.get("api_schemas", []) or []:
+        value = _surface_value_from_item(item, ("schema_url", "url"))
+        if value:
+            candidates.append((value, AssetType.API, "openapi", item))
+    for item in scan_results.get("api_parameters", []) or []:
+        value = _surface_value_from_item(item, ("url", "endpoint"))
+        if value:
+            candidates.append((value, AssetType.API, "arjun", item))
+
+    seen: set[tuple[str, AssetType]] = set()
+    unique_candidates: list[tuple[str, AssetType, str, Any, dict[str, Any]]] = []
+    ai_input: list[dict[str, Any]] = []
+    for value, asset_type, source, raw in candidates:
+        normalized = value.strip()
+        if not normalized:
+            continue
+        key = (normalized.lower(), asset_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        base_classification = _classify_surface(normalized, asset_type, source, raw)
+        unique_candidates.append((normalized, asset_type, source, raw, base_classification))
+        ai_input.append(
+            {
+                "value": normalized[:2048],
+                "asset_type": asset_type.value,
+                "source": source,
+                "path": base_classification.get("path"),
+                "status": base_classification.get("status"),
+            }
+        )
+        if len(unique_candidates) >= 1000:
+            break
+
+    ai_classifications = classify_attack_surface(ai_input[:150])
+    retained = 0
+    for normalized, asset_type, source, _raw, classification in unique_candidates:
+        ai_classification = ai_classifications.get(normalized)
+        if ai_classification:
+            merged_signals = [
+                str(signal)
+                for signal in [*classification.get("signals", []), *ai_classification.get("signals", [])]
+                if signal
+            ]
+            classification = {
+                **classification,
+                **ai_classification,
+                "signals": sorted(set(merged_signals)),
+            }
+        else:
+            classification = {**classification, "classifier": "local_fallback"}
+        _upsert_discovered_asset(session, scan, normalized[:2048], asset_type, source, classification)
+        retained += 1
+
+    logger.info("Scan %s retained %s discovered surface assets", scan.id, retained)
+
+
+def _upsert_asset_for_finding(session, scan: Scan, finding: dict[str, Any]) -> Asset | None:
+    if not scan.user_id:
+        return None
+    value = str(finding.get("affected") or scan.url or "").strip()
+    if not value:
+        return None
+
+    asset_type = _asset_type_for_value(value)
+    now = datetime.now(timezone.utc)
+    asset = (
+        session.query(Asset)
+        .filter(
+            Asset.user_id == scan.user_id,
+            Asset.value == value,
+            Asset.asset_type == asset_type,
+        )
+        .first()
+    )
+    metadata = {
+        "category": finding.get("category"),
+        "severity": finding.get("severity"),
+        "last_scan_id": str(scan.id),
+    }
+    if asset:
+        asset.last_seen_at = now
+        asset.scan_id = scan.id
+        asset.program_id = scan.program_id or asset.program_id
+        asset.metadata_json = {**(asset.metadata_json or {}), **metadata}
+        return asset
+
+    asset = Asset(
+        user_id=scan.user_id,
+        program_id=scan.program_id,
+        scan_id=scan.id,
+        value=value,
+        asset_type=asset_type,
+        source="ai_report",
+        metadata_json=metadata,
+        first_seen_at=now,
+        last_seen_at=now,
+    )
+    session.add(asset)
+    session.flush()
+    return asset
+
+
+def _persist_report_findings(session, scan: Scan, report: dict, scan_results: dict[str, Any] | None = None) -> None:
+    """Create/update triageable findings and evidence from the final report."""
+    if not scan.user_id:
+        return
+
+    findings = report.get("findings") if isinstance(report.get("findings"), list) else []
+    if not findings:
+        return
+
+    now = datetime.now(timezone.utc)
+    seen_keys: set[str] = set()
+    for item in findings:
+        if not isinstance(item, dict):
+            continue
+        dedupe_key = _finding_dedupe_key(scan.user_id, item)
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+
+        asset = _upsert_asset_for_finding(session, scan, item)
+        severity = _normalize_finding_severity(item.get("severity"))
+        finding = (
+            session.query(Finding)
+            .filter(Finding.user_id == scan.user_id, Finding.dedupe_key == dedupe_key)
+            .first()
+        )
+        if finding:
+            finding.last_seen_at = now
+            finding.scan_id = scan.id
+            finding.asset_id = asset.id if asset else finding.asset_id
+            finding.program_id = scan.program_id or finding.program_id
+            finding.title = str(item.get("title") or finding.title)[:255]
+            finding.category = str(item.get("category") or finding.category or "other")[:80]
+            finding.severity = severity
+            finding.affected = str(item.get("affected") or finding.affected or scan.url)[:2048]
+            finding.evidence_summary = item.get("evidence") or finding.evidence_summary
+            finding.what_it_means = item.get("what_it_means") or finding.what_it_means
+            finding.remediation = item.get("how_to_fix") if isinstance(item.get("how_to_fix"), list) else finding.remediation
+            finding.fix_prompt = item.get("fix_prompt") or finding.fix_prompt
+        else:
+            finding = Finding(
+                user_id=scan.user_id,
+                program_id=scan.program_id,
+                scan_id=scan.id,
+                asset_id=asset.id if asset else None,
+                title=str(item.get("title") or "Untitled finding")[:255],
+                category=str(item.get("category") or "other")[:80],
+                severity=severity,
+                affected=str(item.get("affected") or scan.url)[:2048],
+                evidence_summary=item.get("evidence"),
+                what_it_means=item.get("what_it_means"),
+                remediation=item.get("how_to_fix") if isinstance(item.get("how_to_fix"), list) else [],
+                fix_prompt=item.get("fix_prompt"),
+                source="ai_report",
+                dedupe_key=dedupe_key,
+                first_seen_at=now,
+                last_seen_at=now,
+            )
+            session.add(finding)
+            session.flush()
+
+        evidence_payload = {
+            "finding": item,
+            "scan_id": str(scan.id),
+            "url": scan.url,
+        }
+        if scan_results:
+            evidence_payload["scan_overview"] = {
+                key: len(value) if isinstance(value, list) else bool(value)
+                for key, value in scan_results.items()
+                if key in {
+                    "subdomains",
+                    "dns_records",
+                    "live_hosts",
+                    "open_ports",
+                    "crawled_endpoints",
+                    "api_discovered_routes",
+                    "vulnerabilities",
+                    "api_vulnerabilities",
+                    "xss_findings",
+                }
+            }
+        session.add(
+            Evidence(
+                finding_id=finding.id,
+                evidence_type=EvidenceType.SCANNER_JSON,
+                title=f"Scan evidence for {str(item.get('title') or 'finding')[:120]}",
+                content=item.get("evidence"),
+                raw_json=evidence_payload,
+            )
+        )
+
+
+def _set_scan_complete(scan_id: str, report: dict, scan_results: dict[str, Any] | None = None) -> None:
     """Mark a scan as complete and save the report and token usage."""
     with get_db_session() as session:
         scan = session.query(Scan).filter(Scan.id == scan_id).first()
@@ -198,6 +606,8 @@ def _set_scan_complete(scan_id: str, report: dict) -> None:
                     f"{token_usage.get('total_tokens', 0)} tokens"
                 )
 
+            _persist_discovered_surface(session, scan, scan_results)
+            _persist_report_findings(session, scan, report, scan_results)
             session.commit()
             publish_scan_event(scan, "scan.completed")
             try:
@@ -222,6 +632,48 @@ def _set_scan_complete(scan_id: str, report: dict) -> None:
             logger.info(f"Scan {scan_id} completed successfully")
 
 
+def _load_scan_auth_headers(scan_id: str) -> tuple[dict[str, str], dict[str, Any] | None]:
+    """Load decrypted auth headers for a scan, returning only safe metadata too."""
+    with get_db_session() as session:
+        scan = session.query(Scan).filter(Scan.id == scan_id).first()
+        if not scan or not scan.auth_profile_id:
+            return {}, None
+        profile = (
+            session.query(AuthProfile)
+            .filter(AuthProfile.id == scan.auth_profile_id, AuthProfile.is_active == True)
+            .first()
+        )
+        if not profile:
+            logger.warning("Scan %s references a missing or inactive auth profile", scan_id)
+            return {}, None
+        try:
+            headers = decrypt_auth_headers(profile.encrypted_headers)
+        except AuthProfileError as e:
+            logger.warning("Scan %s auth profile could not be decrypted: %s", scan_id, e)
+            return {}, None
+        return headers, {
+            "auth_profile_id": str(profile.id),
+            "auth_profile_name": profile.name,
+            "header_names": profile.header_names or list(headers.keys()),
+        }
+
+
+def _redact_auth_values(value: Any, secrets: list[str]) -> Any:
+    if not secrets:
+        return value
+    if isinstance(value, str):
+        redacted = value
+        for secret in secrets:
+            if secret:
+                redacted = redacted.replace(secret, "[redacted-auth]")
+        return redacted
+    if isinstance(value, list):
+        return [_redact_auth_values(item, secrets) for item in value]
+    if isinstance(value, dict):
+        return {key: _redact_auth_values(item, secrets) for key, item in value.items()}
+    return value
+
+
 async def _run_pipeline(scan_id: str, url: str) -> None:
     """
     Execute the full 7-step scanning pipeline asynchronously with parallel execution.
@@ -235,6 +687,9 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
     domain = extract_domain(url)
     scan_results = {}
     scan_id_str = str(scan_id)
+    auth_headers, auth_context = _load_scan_auth_headers(scan_id_str)
+    if auth_context:
+        scan_results["auth_context"] = auth_context
     pipeline_slots = asyncio.Semaphore(max(1, settings.SCAN_PIPELINE_PARALLELISM))
 
     async def limited(task_name: str, task_coro):
@@ -338,7 +793,7 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
             """Web crawling task."""
             _update_subtask(scan_id_str, "katana", "running")
             try:
-                crawled = await run_katana(url, scan_id_str)
+                crawled = await run_katana(url, scan_id_str, auth_headers=auth_headers)
                 scan_results["crawled_endpoints"] = crawled
                 _update_subtask(scan_id_str, "katana", "complete")
                 return "success"
@@ -356,6 +811,7 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
                     url,
                     scan_id_str,
                     open_ports=scan_results.get("open_ports", []),
+                    auth_headers=auth_headers,
                 )
                 scan_results["webcheck"] = enrichment
                 _update_subtask(scan_id_str, "webcheck", "complete")
@@ -370,7 +826,7 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
             """Vulnerability scanning task."""
             _update_subtask(scan_id_str, "nuclei", "running")
             try:
-                vulns = await run_nuclei(url, scan_id_str)
+                vulns = await run_nuclei(url, scan_id_str, auth_headers=auth_headers)
                 scan_results["vulnerabilities"] = vulns
                 _update_subtask(scan_id_str, "nuclei", "complete")
                 return "success"
@@ -412,7 +868,7 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
             """Hidden API route discovery."""
             _update_subtask(scan_id_str, "ffuf_api", "running")
             try:
-                routes = await run_ffuf_api_discovery(url, scan_id_str)
+                routes = await run_ffuf_api_discovery(url, scan_id_str, auth_headers=auth_headers)
                 scan_results["api_discovered_routes"] = routes
                 _update_subtask(scan_id_str, "ffuf_api", "complete")
                 return "success"
@@ -426,7 +882,7 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
             """API-focused vulnerability and exposure checks."""
             _update_subtask(scan_id_str, "nuclei_api", "running")
             try:
-                api_vulns = await run_nuclei_api_checks(url, scan_id_str)
+                api_vulns = await run_nuclei_api_checks(url, scan_id_str, auth_headers=auth_headers)
                 scan_results["api_vulnerabilities"] = api_vulns
                 _update_subtask(scan_id_str, "nuclei_api", "complete")
                 return "success"
@@ -464,6 +920,7 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
                     scan_id_str,
                     crawled_endpoints=scan_results.get("crawled_endpoints", []),
                     ffuf_routes=scan_results.get("api_discovered_routes", []),
+                    auth_headers=auth_headers,
                 )
                 scan_results["api_schemas"] = schemas
                 _update_subtask(scan_id_str, "openapi", "complete")
@@ -519,6 +976,7 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
                     url,
                     scan_id_str,
                     crawled_endpoints=scan_results.get("crawled_endpoints", []),
+                    auth_headers=auth_headers,
                 )
                 scan_results["xss_findings"] = xss
                 _update_subtask(scan_id_str, "dalfox", "complete")
@@ -554,11 +1012,12 @@ async def _run_pipeline(scan_id: str, url: str) -> None:
         # Step 7 — AI report generation
         _update_scan_progress(scan_id_str, 7)
         _update_subtask(scan_id_str, "ai", "running")
+        scan_results = _redact_auth_values(scan_results, list(auth_headers.values()))
         report = generate_report(url, scan_results)
         _update_subtask(scan_id_str, "ai", "complete")
 
         # Save report and mark complete
-        _set_scan_complete(scan_id_str, report)
+        _set_scan_complete(scan_id_str, report, scan_results)
 
     except Exception as e:
         logger.exception(f"Pipeline failed for scan {scan_id_str}")

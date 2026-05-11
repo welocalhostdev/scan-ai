@@ -54,17 +54,69 @@ function Field({
 const inputClass =
   "h-11 w-full rounded-[4px] border border-white/10 bg-black/30 px-3 text-sm font-medium text-zinc-100 outline-none transition-colors placeholder:text-zinc-600 focus:border-[#4fa5b6]/60 focus:ring-4 focus:ring-[#4fa5b6]/10 disabled:cursor-not-allowed disabled:opacity-60";
 
-const COMMON_TIMEZONES = [
-  "UTC",
-  "Asia/Kolkata",
-  "America/New_York",
-  "America/Los_Angeles",
-  "Europe/London",
-  "Europe/Berlin",
-  "Asia/Singapore",
-  "Asia/Dubai",
-  "Australia/Sydney",
-];
+type TimezoneOption = {
+  value: string;
+  label: string;
+};
+
+function offsetMinutesFor(timezone: string) {
+  const value = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(new Date())
+    .find((part) => part.type === "timeZoneName")?.value;
+  if (!value || value === "GMT" || value === "UTC") return 0;
+
+  const match = value.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  if (!match) return 0;
+  const sign = match[1] === "-" ? -1 : 1;
+  const hours = Number(match[2] || 0);
+  const minutes = Number(match[3] || 0);
+  return sign * ((hours * 60) + minutes);
+}
+
+function formatUtcOffset(minutes: number, compactZero = false) {
+  if (compactZero && minutes === 0) return "UTC";
+  if (minutes === 0) return "UTC+00:00";
+  const sign = minutes < 0 ? "-" : "+";
+  const absolute = Math.abs(minutes);
+  const hours = Math.floor(absolute / 60);
+  const remainder = absolute % 60;
+  return `UTC${sign}${String(hours).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function parseUtcOffset(value: string) {
+  if (value === "UTC") return 0;
+  const match = value.match(/^UTC([+-])(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const sign = match[1] === "-" ? -1 : 1;
+  return sign * ((Number(match[2]) * 60) + Number(match[3]));
+}
+
+function normalizeTimezoneValue(value: string) {
+  const offset = parseUtcOffset(value);
+  if (offset !== null) return formatUtcOffset(offset, true);
+  try {
+    return formatUtcOffset(offsetMinutesFor(value), true);
+  } catch {
+    return "UTC";
+  }
+}
+
+function buildTimezoneOptions(): TimezoneOption[] {
+  const options: TimezoneOption[] = [];
+  for (let minutes = -12 * 60; minutes <= 14 * 60; minutes += 30) {
+    const value = formatUtcOffset(minutes, true);
+    options.push({
+      value,
+      label: `(${formatUtcOffset(minutes)}) ${value}`,
+    });
+  }
+  return options;
+}
+
+const UTC_OFFSET_OPTIONS = buildTimezoneOptions();
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
@@ -85,9 +137,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (user) {
-      setName(user.name);
-      setTimezoneName(user.timezone || "UTC");
-      setNewEmail("");
+      window.setTimeout(() => {
+        setName(user.name);
+        setTimezoneName(normalizeTimezoneValue(user.timezone || "UTC"));
+        setNewEmail("");
+      }, 0);
     }
   }, [user]);
 
@@ -213,19 +267,18 @@ export default function SettingsPage() {
           <SettingsCard icon={Clock3} title="Schedule timezone">
             <form onSubmit={saveTimezone} className="space-y-4">
               <Field label="Timezone">
-                <input
+                <select
                   className={inputClass}
-                  list="settings-timezones"
                   value={timezoneName}
                   onChange={(event) => setTimezoneName(event.target.value)}
-                  placeholder="Asia/Kolkata"
                   disabled={busy === "timezone"}
-                />
-                <datalist id="settings-timezones">
-                  {COMMON_TIMEZONES.map((timezone) => (
-                    <option key={timezone} value={timezone} />
+                >
+                  {UTC_OFFSET_OPTIONS.map((timezone) => (
+                    <option key={timezone.value} value={timezone.value}>
+                      {timezone.label}
+                    </option>
                   ))}
-                </datalist>
+                </select>
               </Field>
               <p className="text-sm leading-6 text-zinc-500">
                 Recurring checkups use this timezone. New accounts start with a best-effort timezone from signup IP, and you can adjust it here.

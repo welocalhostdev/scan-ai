@@ -5,16 +5,14 @@ import Image from "next/image";
 import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  Activity,
   Bell,
-  Bot,
   Boxes,
+  ClipboardList,
   ChevronDown,
   Command,
   FileText,
   Gauge,
   LogOut,
-  Radar,
   Search,
   Settings,
   ShieldAlert,
@@ -27,13 +25,13 @@ import { cn } from "@/lib/utils";
 const PRIMARY_NAV = [
   { label: "Dashboard", href: "/dashboard", icon: Gauge, view: null },
   { label: "Surface", href: "/dashboard?view=surface", icon: Boxes, view: "surface" },
+  { label: "Programs", href: "/dashboard?view=programs", icon: ClipboardList, view: "programs" },
   { label: "Findings", href: "/dashboard?view=findings", icon: ShieldAlert, view: "findings" },
   { label: "Reports", href: "/dashboard?view=reports", icon: FileText, view: "reports" },
-  { label: "Agents", href: "/dashboard?view=agents", icon: Bot, view: "agents" },
 ];
 
-const PRIMARY_VIEWS = ["surface", "findings", "reports", "agents"];
-const UTILITY_PANELS = ["activity", "radar", "notifications", "account", "search"];
+const PRIMARY_VIEWS = ["surface", "programs", "findings", "reports"];
+const UTILITY_PANELS = ["notifications", "account", "search"];
 const DASHBOARD_THEME_KEY = "scanai-dashboard-theme";
 
 function UtilityDrawer({
@@ -50,8 +48,6 @@ function UtilityDrawer({
   if (!panel || !UTILITY_PANELS.includes(panel)) return null;
 
   const title = {
-    activity: "Live activity",
-    radar: "API radar",
     notifications: "Notifications",
     account: "Account",
     search: "Command search",
@@ -213,32 +209,6 @@ export function AppHeader() {
         </Link>
 
         <div className="ml-auto flex h-full shrink-0 items-center">
-          <Link
-            href={utilityHref("activity")}
-            className={cn(
-              "flex h-full w-14 items-center justify-center border-l border-white/10 transition-colors",
-              activePanel === "activity"
-                ? "bg-[#4fa5b6]/12 text-[#d9f7ff]"
-                : "text-zinc-400 hover:bg-white/[0.055] hover:text-zinc-100"
-            )}
-            title="Live activity"
-            aria-current={activePanel === "activity" ? "page" : undefined}
-          >
-            <Activity className="h-4 w-4" />
-          </Link>
-          <Link
-            href={utilityHref("radar")}
-            className={cn(
-              "hidden h-full w-14 items-center justify-center border-l border-white/10 transition-colors sm:flex",
-              activePanel === "radar"
-                ? "bg-[#4fa5b6]/12 text-[#d9f7ff]"
-                : "text-zinc-400 hover:bg-white/[0.055] hover:text-zinc-100"
-            )}
-            title="API radar"
-            aria-current={activePanel === "radar" ? "page" : undefined}
-          >
-            <Radar className="h-4 w-4" />
-          </Link>
           <Link
             href={utilityHref("notifications")}
             className={cn(

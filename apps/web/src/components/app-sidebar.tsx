@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
@@ -31,24 +31,25 @@ const NAV_GROUPS = [
     label: "Overview",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: Gauge },
-      { label: "Attack Surface", href: "/dashboard?surface=true", icon: Boxes },
-      { label: "Scan History", href: "/dashboard?history=true", icon: History },
+      { label: "Attack Surface", href: "/dashboard?view=surface", icon: Boxes },
+      { label: "Scan History", href: "/dashboard?view=scans", icon: History },
     ],
   },
   {
     label: "Detection",
     items: [
-      { label: "Threat Exposure", href: "/dashboard?exposure=true", icon: ShieldAlert },
-      { label: "API Discovery", href: "/dashboard?api=true", icon: Radar },
-      { label: "Incidents", href: "/dashboard?incidents=true", icon: AlertTriangle },
-      { label: "Findings", href: "/dashboard?findings=true", icon: Bug },
+      { label: "Programs", href: "/dashboard?view=programs", icon: ClipboardList },
+      { label: "Threat Exposure", href: "/dashboard?view=findings", icon: ShieldAlert },
+      { label: "API Discovery", href: "/dashboard?panel=radar", icon: Radar },
+      { label: "Incidents", href: "/dashboard?view=scans&status=failed", icon: AlertTriangle },
+      { label: "Findings", href: "/dashboard?view=findings", icon: Bug },
     ],
   },
   {
     label: "Controls",
     items: [
       { label: "IP Lists", href: "/dashboard?ips=true", icon: Globe2 },
-      { label: "Rules", href: "/dashboard?rules=true", icon: ClipboardList },
+      { label: "Rules", href: "/dashboard?view=programs", icon: ClipboardList },
       { label: "Credentials", href: "/dashboard?credentials=true", icon: KeyRound },
       { label: "BOLA Protection", href: "/dashboard?bola=true", icon: LockKeyhole },
     ],
@@ -57,8 +58,11 @@ const NAV_GROUPS = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { isAdmin } = useAuth();
   const adminHref = process.env.NEXT_PUBLIC_ADMIN_APP_URL || "http://localhost:3001";
+  const activeView = searchParams.get("view");
+  const activePanel = searchParams.get("panel");
 
   return (
     <aside className="fixed left-0 top-0 bottom-0 z-40 flex w-[280px] flex-col border-r border-white/8 bg-[#070a0a] text-zinc-300">
@@ -88,7 +92,12 @@ export function AppSidebar() {
             </p>
             <div className="space-y-1">
               {group.items.map((item) => {
-                const active = pathname === item.href.split("?")[0] && item.label === "Dashboard";
+                const itemUrl = new URL(item.href, "http://scanai.local");
+                const itemView = itemUrl.searchParams.get("view");
+                const itemPanel = itemUrl.searchParams.get("panel");
+                const active =
+                  pathname === itemUrl.pathname &&
+                  (itemView ? activeView === itemView : itemPanel ? activePanel === itemPanel : !activeView && !activePanel);
                 const Icon = item.icon;
 
                 return (

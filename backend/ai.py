@@ -18,6 +18,48 @@ logger = logging.getLogger(__name__)
 
 # Model settings
 MAX_OUTPUT_TOKENS = 4096
+SURFACE_CLASSIFICATION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["items"],
+    "properties": {
+        "items": {
+            "type": "array",
+            "maxItems": 150,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["value", "surface_role", "ai_label", "priority", "ai_confidence", "signals"],
+                "properties": {
+                    "value": {"type": "string"},
+                    "surface_role": {
+                        "type": "string",
+                        "enum": [
+                            "login",
+                            "admin",
+                            "api",
+                            "api_docs",
+                            "sensitive_user_area",
+                            "file_upload",
+                            "operational",
+                            "parameterized",
+                            "access_controlled",
+                            "static",
+                            "subdomain",
+                            "service",
+                            "route",
+                            "other",
+                        ],
+                    },
+                    "ai_label": {"type": "string"},
+                    "priority": {"type": "string", "enum": ["high", "medium", "normal", "low"]},
+                    "ai_confidence": {"type": "number"},
+                    "signals": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        }
+    },
+}
 
 # Structured Outputs schema for the final security report.
 REPORT_SCHEMA: dict[str, Any] = {
@@ -145,6 +187,7 @@ def _make_gemini_schema_compatible(value: Any) -> Any:
 
 
 GEMINI_RESPONSE_SCHEMA = _make_gemini_schema_compatible(REPORT_SCHEMA)
+GEMINI_SURFACE_CLASSIFICATION_SCHEMA = _make_gemini_schema_compatible(SURFACE_CLASSIFICATION_SCHEMA)
 
 # System prompt — instructs Gemini to act as a cybersecurity expert.
 SYSTEM_PROMPT = """You are a senior application security analyst writing a client-ready security memo for a non-technical website owner.
@@ -183,6 +226,21 @@ Safety and quality rules:
 - Never mention internal file paths, local paths, private IPs, or implementation trivia unless absolutely required to explain exposure.
 - Never output markdown, code fences, prose outside the JSON object, or placeholder text.
 - If the target looks broadly healthy, return a low risk_score and an empty or very short findings list rather than padding the report."""
+
+SURFACE_CLASSIFIER_PROMPT = """You classify discovered web attack-surface entries for a defensive bug bounty scanner.
+Use only the supplied URL/host evidence. Do not invent vulnerabilities.
+
+Goal:
+- Identify likely login, SSO, admin, API, API documentation, account/payment, upload/import, operational, static, subdomain, service, and ordinary route entries.
+- Prioritize entries that a tester should inspect before production.
+- Keep labels short and practical.
+
+Rules:
+- Login/admin/API documentation/account/upload/operational endpoints are usually high priority.
+- Static assets are low priority.
+- Unknown routes are normal priority.
+- Confidence must be between 0 and 1.
+- Signals should be short factual phrases from the value, path, source, or status code."""
 
 
 def _truncate_text(text: str, limit: int) -> str:
@@ -846,6 +904,79 @@ def generate_report(url: str, scan_results: dict[str, Any]) -> dict[str, Any]:
 
     user_message = _build_user_message(url, scan_results)
     return _generate_with_gemini(user_message, scan_results)
+
+
+def classify_attack_surface(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """
+    Classify discovered hosts/routes with Gemini for route intent, returning a
+    mapping keyed by the original value. Callers should keep a local fallback.
+    """
+    if not items or not settings.GEMINI_API_KEY:
+        return {}
+
+    compact_items = []
+    for item in items[:150]:
+        compact_items.append(
+            {
+                "value": str(item.get("value") or "")[:2048],
+                "asset_type": str(item.get("asset_type") or "other"),
+                "source": str(item.get("source") or "scan"),
+                "path": str(item.get("path") or "")[:512],
+                "status": item.get("status"),
+            }
+        )
+
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    user_message = json.dumps({"items": compact_items}, ensure_ascii=False)
+    last_error = None
+    for model_name in settings.gemini_model_candidates:
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                system_instruction=SURFACE_CLASSIFIER_PROMPT,
+                generation_config={
+                    "temperature": 0.1,
+                    "max_output_tokens": 3072,
+                    "response_mime_type": "application/json",
+                    "response_schema": GEMINI_SURFACE_CLASSIFICATION_SCHEMA,
+                },
+            )
+            response = model.generate_content(user_message)
+            payload = _extract_parsed_report(response)
+            if not payload:
+                raw_text = _extract_response_text(response)
+                if raw_text:
+                    payload = json.loads(_strip_json_fences(raw_text))
+            classified = payload.get("items", []) if isinstance(payload, dict) else []
+            result: dict[str, dict[str, Any]] = {}
+            for entry in classified:
+                if not isinstance(entry, dict):
+                    continue
+                value = str(entry.get("value") or "").strip()
+                if not value:
+                    continue
+                confidence = entry.get("ai_confidence")
+                if isinstance(confidence, (int, float)):
+                    confidence = max(0, min(1, float(confidence)))
+                else:
+                    confidence = 0.6
+                result[value] = {
+                    "surface_role": entry.get("surface_role") or "other",
+                    "ai_label": entry.get("ai_label") or "Discovered surface",
+                    "priority": entry.get("priority") or "normal",
+                    "ai_confidence": round(confidence, 2),
+                    "signals": entry.get("signals") if isinstance(entry.get("signals"), list) else [],
+                    "classifier": "gemini",
+                    "classifier_model": model_name,
+                }
+            return result
+        except Exception as e:
+            last_error = e
+            logger.warning("Gemini surface classifier %s failed: %s", model_name, e)
+            continue
+
+    logger.warning("All Gemini surface classifiers failed: %s", last_error)
+    return {}
 
 
 def _generate_with_gemini(user_message: str, scan_results: dict[str, Any]) -> dict[str, Any]:

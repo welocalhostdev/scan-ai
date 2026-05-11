@@ -167,6 +167,36 @@ def _text_output_path(scan_id: str, suffix: str) -> str:
     return str(OUTPUT_DIR / f"{scan_id}_{suffix}.txt")
 
 
+def _auth_header_args(auth_headers: dict[str, str] | None) -> list[str]:
+    args: list[str] = []
+    for name, value in (auth_headers or {}).items():
+        if name and value:
+            args.extend(["-H", f"{name}: {value}"])
+    return args
+
+
+def _merge_headers(base: dict[str, str], auth_headers: dict[str, str] | None) -> dict[str, str]:
+    merged = dict(base)
+    for name, value in (auth_headers or {}).items():
+        if name and value:
+            merged[name] = value
+    return merged
+
+
+def _redact_command(cmd: list[str]) -> str:
+    redacted_cmd = []
+    redact_next = False
+    for part in cmd:
+        if redact_next:
+            redacted_cmd.append("[redacted-header]")
+            redact_next = False
+            continue
+        redacted_cmd.append(part)
+        if part in {"-H", "--header", "-header"}:
+            redact_next = True
+    return " ".join(redacted_cmd)
+
+
 async def _run_subprocess(
     cmd: list[str],
     timeout: int | None = None,
@@ -180,7 +210,7 @@ async def _run_subprocess(
     """
     effective_timeout = timeout or settings.TOOL_TIMEOUT_SECONDS
 
-    logger.info(f"Running command: {' '.join(cmd)}")
+    logger.info(f"Running command: {_redact_command(cmd)}")
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
@@ -200,7 +230,7 @@ async def _run_subprocess(
         process.kill()
         await process.wait()
         raise asyncio.TimeoutError(
-            f"Command timed out after {effective_timeout}s: {' '.join(cmd)}"
+            f"Command timed out after {effective_timeout}s: {_redact_command(cmd)}"
         )
 
     return (
@@ -924,7 +954,7 @@ async def run_naabu(domain: str, scan_id: str) -> list[dict[str, Any]]:
     return results
 
 
-async def run_katana(url: str, scan_id: str) -> list[dict[str, Any]]:
+async def run_katana(url: str, scan_id: str, auth_headers: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """
     Step 4: Web crawling — finds endpoints, JS files, forms.
 
@@ -942,6 +972,7 @@ async def run_katana(url: str, scan_id: str) -> list[dict[str, Any]]:
         "-json",
         "-o", output_file,
     ]
+    cmd.extend(_auth_header_args(auth_headers))
 
     stdout, stderr, returncode = await _run_subprocess(cmd)
 
@@ -953,7 +984,7 @@ async def run_katana(url: str, scan_id: str) -> list[dict[str, Any]]:
     return results
 
 
-async def run_nuclei(url: str, scan_id: str) -> list[dict[str, Any]]:
+async def run_nuclei(url: str, scan_id: str, auth_headers: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """
     Step 5: Vulnerability scanning with 10,000+ community templates.
 
@@ -973,6 +1004,7 @@ async def run_nuclei(url: str, scan_id: str) -> list[dict[str, Any]]:
         "-json",
         "-o", output_file,
     ]
+    cmd.extend(_auth_header_args(auth_headers))
 
     # nuclei can take longer — give it extra time
     stdout, stderr, returncode = await _run_subprocess(
@@ -987,7 +1019,7 @@ async def run_nuclei(url: str, scan_id: str) -> list[dict[str, Any]]:
     return results
 
 
-async def run_nuclei_api_checks(url: str, scan_id: str) -> list[dict[str, Any]]:
+async def run_nuclei_api_checks(url: str, scan_id: str, auth_headers: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """
     API-focused Nuclei pass.
 
@@ -1008,6 +1040,7 @@ async def run_nuclei_api_checks(url: str, scan_id: str) -> list[dict[str, Any]]:
         "-json",
         "-o", output_file,
     ]
+    cmd.extend(_auth_header_args(auth_headers))
 
     stdout, stderr, returncode = await _run_subprocess(
         cmd, timeout=settings.TOOL_TIMEOUT_SECONDS * 2
@@ -1021,7 +1054,7 @@ async def run_nuclei_api_checks(url: str, scan_id: str) -> list[dict[str, Any]]:
     return results
 
 
-async def run_ffuf_api_discovery(url: str, scan_id: str) -> list[dict[str, Any]]:
+async def run_ffuf_api_discovery(url: str, scan_id: str, auth_headers: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """
     Bounded hidden API route discovery with ffuf.
 
@@ -1045,6 +1078,7 @@ async def run_ffuf_api_discovery(url: str, scan_id: str) -> list[dict[str, Any]]
         "-mc", "200,201,202,204,301,302,307,308,401,403,405",
         "-s",
     ]
+    cmd.extend(_auth_header_args(auth_headers))
 
     stdout, stderr, returncode = await _run_subprocess(cmd)
     if returncode != 0:
@@ -1166,6 +1200,7 @@ async def run_openapi_schema_discovery(
     scan_id: str,
     crawled_endpoints: list[dict[str, Any]] | None = None,
     ffuf_routes: list[dict[str, Any]] | None = None,
+    auth_headers: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Discover and summarize exposed OpenAPI/Swagger schemas.
@@ -1184,7 +1219,7 @@ async def run_openapi_schema_discovery(
     async with httpx_client.AsyncClient(
         timeout=httpx_client.Timeout(8.0),
         follow_redirects=True,
-        headers={"User-Agent": "ScanAI schema discovery"},
+        headers=_merge_headers({"User-Agent": "ScanAI schema discovery"}, auth_headers),
     ) as client:
         for candidate in candidates:
             try:
@@ -1229,6 +1264,7 @@ async def run_webcheck_enrichment(
     url: str,
     scan_id: str,
     open_ports: list[dict[str, Any]] | None = None,
+    auth_headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """
     Fast Web-Check style passive enrichment.
@@ -1253,7 +1289,7 @@ async def run_webcheck_enrichment(
     async with httpx_client.AsyncClient(
         timeout=timeout,
         follow_redirects=True,
-        headers={"User-Agent": "ScanAI web intelligence"},
+        headers=_merge_headers({"User-Agent": "ScanAI web intelligence"}, auth_headers),
     ) as client:
         main_response = None
         main_error = None
@@ -1535,7 +1571,12 @@ def _extract_urls_from_katana(items: list[dict[str, Any]]) -> list[str]:
     return urls
 
 
-async def run_dalfox(url: str, scan_id: str, crawled_endpoints: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+async def run_dalfox(
+    url: str,
+    scan_id: str,
+    crawled_endpoints: list[dict[str, Any]] | None = None,
+    auth_headers: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """
     Active XSS scanning (specialist).
 
@@ -1569,6 +1610,7 @@ async def run_dalfox(url: str, scan_id: str, crawled_endpoints: list[dict[str, A
         "--timeout", "8",
         "-o", output_file,
     ]
+    cmd.extend(_auth_header_args(auth_headers))
 
     # Dalfox can take longer; give it extra time.
     stdout, stderr, returncode = await _run_subprocess(

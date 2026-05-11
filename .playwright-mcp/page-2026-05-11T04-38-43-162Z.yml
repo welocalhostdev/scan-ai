@@ -1,0 +1,50 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "ScanAI Command desk" [ref=e5] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e6]:
+            - paragraph [ref=e7]: ScanAI
+            - paragraph [ref=e8]: Command desk
+        - navigation "Primary" [ref=e9]:
+          - link "Dashboard" [ref=e10] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e11]
+            - text: Dashboard
+          - link "Surface" [ref=e14] [cursor=pointer]:
+            - /url: /dashboard?view=surface
+            - img [ref=e15]
+            - text: Surface
+          - link "Programs" [ref=e25] [cursor=pointer]:
+            - /url: /dashboard?view=programs
+            - img [ref=e26]
+            - text: Programs
+          - link "Findings" [ref=e29] [cursor=pointer]:
+            - /url: /dashboard?view=findings
+            - img [ref=e30]
+            - text: Findings
+          - link "Reports" [ref=e32] [cursor=pointer]:
+            - /url: /dashboard?view=reports
+            - img [ref=e33]
+            - text: Reports
+        - generic [ref=e36]:
+          - link "Notifications" [ref=e37] [cursor=pointer]:
+            - /url: /dashboard?panel=notifications
+            - img [ref=e38]
+          - link "Settings" [ref=e41] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e42]
+          - link "H Himanshu himanshudubey2401@gmail.com" [ref=e45] [cursor=pointer]:
+            - /url: /dashboard?panel=account
+            - generic [ref=e47]: H
+            - generic [ref=e48]:
+              - paragraph [ref=e49]: Himanshu
+              - paragraph [ref=e50]: himanshudubey2401@gmail.com
+            - img [ref=e51]
+          - button "Log out" [ref=e53]:
+            - img [ref=e54]
+    - main [ref=e57]
+  - button "Open Next.js Dev Tools" [ref=e73] [cursor=pointer]:
+    - img [ref=e74]
+  - alert [ref=e77]

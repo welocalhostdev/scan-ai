@@ -1,0 +1,184 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "ScanAI Command desk" [ref=e5] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e6]:
+            - paragraph [ref=e7]: ScanAI
+            - paragraph [ref=e8]: Command desk
+        - navigation "Primary" [ref=e9]:
+          - link "Dashboard" [ref=e10] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e11]
+            - text: Dashboard
+          - link "Surface" [ref=e14] [cursor=pointer]:
+            - /url: /dashboard?view=surface
+            - img [ref=e15]
+            - text: Surface
+          - link "Programs" [ref=e25] [cursor=pointer]:
+            - /url: /dashboard?view=programs
+            - img [ref=e26]
+            - text: Programs
+          - link "Findings" [ref=e29] [cursor=pointer]:
+            - /url: /dashboard?view=findings
+            - img [ref=e30]
+            - text: Findings
+          - link "Reports" [ref=e32] [cursor=pointer]:
+            - /url: /dashboard?view=reports
+            - img [ref=e33]
+            - text: Reports
+        - generic [ref=e36]:
+          - link "Notifications" [ref=e37] [cursor=pointer]:
+            - /url: /settings?panel=notifications
+            - img [ref=e38]
+          - link "Settings" [ref=e41] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e42]
+          - link "H Himanshu himanshudubey2401@gmail.com" [ref=e45] [cursor=pointer]:
+            - /url: /settings?panel=account
+            - generic [ref=e47]: H
+            - generic [ref=e48]:
+              - paragraph [ref=e49]: Himanshu
+              - paragraph [ref=e50]: himanshudubey2401@gmail.com
+            - img [ref=e51]
+          - button "Log out" [ref=e53]:
+            - img [ref=e54]
+    - main [ref=e57]:
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - generic [ref=e61]:
+            - paragraph [ref=e62]: Account controls
+            - heading "Settings" [level=1] [ref=e63]
+          - generic [ref=e64]: himanshudubey2401@gmail.com/Verified email
+        - generic [ref=e65]:
+          - generic [ref=e66]:
+            - generic [ref=e67]:
+              - img [ref=e69]
+              - heading "Profile" [level=2] [ref=e72]
+            - generic [ref=e73]:
+              - generic [ref=e74]:
+                - generic [ref=e75]: Name
+                - textbox "Name" [ref=e76]: Himanshu
+              - button "Save name" [ref=e77]:
+                - img [ref=e78]
+                - text: Save name
+          - generic [ref=e81]:
+            - generic [ref=e82]:
+              - img [ref=e84]
+              - heading "Schedule timezone" [level=2] [ref=e87]
+            - generic [ref=e88]:
+              - generic [ref=e89]:
+                - generic [ref=e90]: Timezone
+                - combobox "Timezone" [ref=e91]:
+                  - option "(UTC-12:00) UTC-12:00"
+                  - option "(UTC-11:30) UTC-11:30"
+                  - option "(UTC-11:00) UTC-11:00"
+                  - option "(UTC-10:30) UTC-10:30"
+                  - option "(UTC-10:00) UTC-10:00"
+                  - option "(UTC-09:30) UTC-09:30"
+                  - option "(UTC-09:00) UTC-09:00"
+                  - option "(UTC-08:30) UTC-08:30"
+                  - option "(UTC-08:00) UTC-08:00"
+                  - option "(UTC-07:30) UTC-07:30"
+                  - option "(UTC-07:00) UTC-07:00"
+                  - option "(UTC-06:30) UTC-06:30"
+                  - option "(UTC-06:00) UTC-06:00"
+                  - option "(UTC-05:30) UTC-05:30"
+                  - option "(UTC-05:00) UTC-05:00"
+                  - option "(UTC-04:30) UTC-04:30"
+                  - option "(UTC-04:00) UTC-04:00"
+                  - option "(UTC-03:30) UTC-03:30"
+                  - option "(UTC-03:00) UTC-03:00"
+                  - option "(UTC-02:30) UTC-02:30"
+                  - option "(UTC-02:00) UTC-02:00"
+                  - option "(UTC-01:30) UTC-01:30"
+                  - option "(UTC-01:00) UTC-01:00"
+                  - option "(UTC-00:30) UTC-00:30"
+                  - option "(UTC+00:00) UTC" [selected]
+                  - option "(UTC+00:30) UTC+00:30"
+                  - option "(UTC+01:00) UTC+01:00"
+                  - option "(UTC+01:30) UTC+01:30"
+                  - option "(UTC+02:00) UTC+02:00"
+                  - option "(UTC+02:30) UTC+02:30"
+                  - option "(UTC+03:00) UTC+03:00"
+                  - option "(UTC+03:30) UTC+03:30"
+                  - option "(UTC+04:00) UTC+04:00"
+                  - option "(UTC+04:30) UTC+04:30"
+                  - option "(UTC+05:00) UTC+05:00"
+                  - option "(UTC+05:30) UTC+05:30"
+                  - option "(UTC+06:00) UTC+06:00"
+                  - option "(UTC+06:30) UTC+06:30"
+                  - option "(UTC+07:00) UTC+07:00"
+                  - option "(UTC+07:30) UTC+07:30"
+                  - option "(UTC+08:00) UTC+08:00"
+                  - option "(UTC+08:30) UTC+08:30"
+                  - option "(UTC+09:00) UTC+09:00"
+                  - option "(UTC+09:30) UTC+09:30"
+                  - option "(UTC+10:00) UTC+10:00"
+                  - option "(UTC+10:30) UTC+10:30"
+                  - option "(UTC+11:00) UTC+11:00"
+                  - option "(UTC+11:30) UTC+11:30"
+                  - option "(UTC+12:00) UTC+12:00"
+                  - option "(UTC+12:30) UTC+12:30"
+                  - option "(UTC+13:00) UTC+13:00"
+                  - option "(UTC+13:30) UTC+13:30"
+                  - option "(UTC+14:00) UTC+14:00"
+              - paragraph [ref=e92]: Recurring checkups use this timezone. New accounts start with a best-effort timezone from signup IP, and you can adjust it here.
+              - button "Save timezone" [ref=e93]:
+                - img [ref=e94]
+                - text: Save timezone
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - img [ref=e100]
+              - heading "Email" [level=2] [ref=e104]
+            - generic [ref=e105]:
+              - generic [ref=e106]:
+                - generic [ref=e107]: Current email
+                - textbox "Current email" [disabled] [ref=e108]: himanshudubey2401@gmail.com
+              - generic [ref=e109]:
+                - generic [ref=e110]: New email
+                - textbox "New email" [ref=e111]
+              - generic [ref=e112]:
+                - generic [ref=e113]: Current password
+                - textbox "Current password" [ref=e114]
+              - button "Send verification code" [ref=e115]:
+                - img [ref=e116]
+                - text: Send verification code
+          - generic [ref=e120]:
+            - generic [ref=e121]:
+              - img [ref=e123]
+              - heading "Password" [level=2] [ref=e126]
+            - generic [ref=e127]:
+              - generic [ref=e128]:
+                - generic [ref=e129]: Current password
+                - textbox "Current password" [ref=e130]
+              - generic [ref=e131]:
+                - generic [ref=e132]: New password
+                - textbox "New password" [ref=e133]
+              - generic [ref=e134]:
+                - generic [ref=e135]: Confirm new password
+                - textbox "Confirm new password" [ref=e136]
+              - button "Change password" [ref=e137]:
+                - img [ref=e138]
+                - text: Change password
+          - generic [ref=e141]:
+            - generic [ref=e142]:
+              - img [ref=e144]
+              - heading "Security mail" [level=2] [ref=e147]
+            - generic [ref=e148]:
+              - generic [ref=e149]:
+                - img [ref=e150]
+                - text: Name changes
+              - generic [ref=e153]:
+                - img [ref=e154]
+                - text: Email change requests
+              - generic [ref=e157]:
+                - img [ref=e158]
+                - text: New email verification
+              - generic [ref=e161]:
+                - img [ref=e162]
+                - text: Password changes
+  - button "Open Next.js Dev Tools" [ref=e170] [cursor=pointer]:
+    - img [ref=e171]
+  - alert [ref=e174]
