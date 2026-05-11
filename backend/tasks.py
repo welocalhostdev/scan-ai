@@ -52,6 +52,7 @@ from scanner import (
     cleanup_scan_files,
 )
 from ai import classify_attack_surface, generate_report
+from ai_pricing import estimate_ai_cost_usd, format_usd
 from scan_events import publish_scan_event
 
 logger = logging.getLogger(__name__)
@@ -591,14 +592,17 @@ def _set_scan_complete(scan_id: str, report: dict, scan_results: dict[str, Any] 
             # Save token usage if available
             token_usage = report.get("_token_usage")
             if token_usage:
+                model_used = report.get("_model_used")
+                prompt_tokens = token_usage.get("prompt_tokens", 0)
+                completion_tokens = token_usage.get("completion_tokens", 0)
                 token_record = TokenUsage(
                     scan_id=scan.id,
                     user_id=scan.user_id,
-                    prompt_tokens=token_usage.get("prompt_tokens", 0),
-                    completion_tokens=token_usage.get("completion_tokens", 0),
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
                     total_tokens=token_usage.get("total_tokens", 0),
-                    model=report.get("_model_used"),
-                    estimated_cost=None,  # Can be calculated based on model pricing
+                    model=model_used,
+                    estimated_cost=format_usd(estimate_ai_cost_usd(model_used, prompt_tokens, completion_tokens)),
                 )
                 session.add(token_record)
                 logger.info(

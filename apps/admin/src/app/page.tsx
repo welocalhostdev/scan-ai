@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
@@ -9,8 +8,12 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
+  Eye,
+  EyeOff,
   Gauge,
+  LockKeyhole,
   LogOut,
+  Mail,
   PieChart,
   ShieldAlert,
   ShieldCheck,
@@ -280,17 +283,18 @@ function ScanDetailModal({ scan, onClose }: { scan: AdminScan | null; onClose: (
 }
 
 export default function AdminPage() {
-  const { user, loading: authLoading, isAdmin, logout } = useAuth();
-  const router = useRouter();
-  const webLoginUrl = process.env.NEXT_PUBLIC_WEB_APP_URL
-    ? `${process.env.NEXT_PUBLIC_WEB_APP_URL}/login`
-    : "/login";
+  const { user, loading: authLoading, isAdmin, login, logout } = useAuth();
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [scans, setScans] = useState<AdminScan[]>([]);
   const [tokenStats, setTokenStats] = useState<TokenUsageStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [tab, setTab] = useState<AdminTab>("overview");
   const [selectedScan, setSelectedScan] = useState<AdminScan | null>(null);
 
@@ -316,14 +320,13 @@ export default function AdminPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user || !isAdmin) {
-      router.push(webLoginUrl);
       return;
     }
     const timer = window.setTimeout(() => {
       void loadData();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [authLoading, user, isAdmin, router, loadData, webLoginUrl]);
+  }, [authLoading, user, isAdmin, loadData]);
 
   const analytics = useMemo(() => {
     const complete = statusCount(scans, "complete");
@@ -398,10 +401,27 @@ export default function AdminPage() {
 
   async function handleLogout() {
     await logout();
-    router.push(webLoginUrl);
+    setStats(null);
+    setUsers([]);
+    setScans([]);
+    setTokenStats(null);
+    setLoading(false);
   }
 
-  if (authLoading || loading) {
+  async function handleAdminLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginError(null);
+    setLoginLoading(true);
+    try {
+      await login(loginEmail, loginPassword);
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "Login failed.");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  if (authLoading || (user && isAdmin && loading)) {
     return (
       <main className="min-h-full bg-[#090b0d] p-6">
         <div className="mx-auto max-w-[1600px] space-y-5">
@@ -415,7 +435,83 @@ export default function AdminPage() {
     );
   }
 
-  if (!isAdmin) return null;
+  if (!user) {
+    return (
+      <main className="flex min-h-full items-center justify-center bg-[radial-gradient(circle_at_26%_0%,rgba(34,197,94,0.12),transparent_34%),#090b0d] p-6 text-zinc-100">
+        <section className="w-full max-w-md rounded-lg border border-white/8 bg-[#111517] p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Admin access
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Sign in to admin.</h1>
+          <p className="mt-2 text-sm leading-6 text-zinc-500">Use your ScanAI admin email and password. Google sign-in is not available in the admin control plane.</p>
+
+          <form onSubmit={handleAdminLogin} className="mt-7 space-y-4">
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-zinc-300">Email</span>
+              <div className="flex h-12 items-center gap-3 rounded-md border border-white/10 bg-black/24 px-3 focus-within:border-emerald-300/45">
+                <Mail className="h-4 w-4 text-zinc-500" />
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={(event) => setLoginEmail(event.target.value)}
+                  required
+                  autoComplete="email"
+                  className="h-full min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+                  placeholder="admin@example.com"
+                />
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-zinc-300">Password</span>
+              <div className="flex h-12 items-center gap-3 rounded-md border border-white/10 bg-black/24 px-3 focus-within:border-emerald-300/45">
+                <LockKeyhole className="h-4 w-4 text-zinc-500" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="current-password"
+                  className="h-full min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+                  placeholder="Password"
+                />
+                <button type="button" onClick={() => setShowPassword((current) => !current)} className="text-zinc-500 transition-colors hover:text-zinc-200" aria-label={showPassword ? "Hide password" : "Show password"}>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </label>
+
+            {loginError && <p className="rounded-md border border-red-300/20 bg-red-300/10 p-3 text-sm text-red-100">{loginError}</p>}
+
+            <button
+              type="submit"
+              disabled={loginLoading}
+              className="inline-flex h-12 w-full items-center justify-center rounded-md bg-emerald-200 px-4 text-sm font-semibold text-zinc-950 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loginLoading ? "Signing in" : "Sign in"}
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <main className="flex min-h-full items-center justify-center bg-[#090b0d] p-6 text-zinc-100">
+        <section className="w-full max-w-md rounded-lg border border-red-300/15 bg-red-300/[0.045] p-6">
+          <ShieldAlert className="h-8 w-8 text-red-200" />
+          <h1 className="mt-4 text-2xl font-semibold text-zinc-50">Admin access required</h1>
+          <p className="mt-2 text-sm leading-6 text-red-100/80">This account is signed in, but it does not have admin permissions.</p>
+          <button type="button" onClick={handleLogout} className="mt-5 inline-flex h-10 items-center rounded-md border border-white/10 px-4 text-sm font-semibold text-zinc-100 hover:bg-white/[0.06]">
+            Sign out
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   const tabs: Array<{ id: AdminTab; label: string; count?: number }> = [
     { id: "overview", label: "Overview" },
@@ -664,6 +760,7 @@ export default function AdminPage() {
                         <th className="px-4 py-3 font-medium">User</th>
                         <th className="px-4 py-3 font-medium">Model</th>
                         <th className="px-4 py-3 text-right font-medium">Tokens</th>
+                        <th className="px-4 py-3 text-right font-medium">Cost</th>
                         <th className="px-4 py-3 text-right font-medium">Date</th>
                       </tr>
                     </thead>
@@ -674,6 +771,7 @@ export default function AdminPage() {
                           <td className="px-4 py-4 text-zinc-500">{usage.user_email || "Anonymous"}</td>
                           <td className="px-4 py-4 font-mono text-xs text-zinc-400">{usage.model || "unknown"}</td>
                           <td className="px-4 py-4 text-right font-mono text-zinc-300">{usage.total_tokens.toLocaleString()}</td>
+                          <td className="px-4 py-4 text-right font-mono text-amber-100">{usage.estimated_cost || "$0.0000"}</td>
                           <td className="px-4 py-4 text-right text-zinc-500">{new Date(usage.created_at).toLocaleDateString()}</td>
                         </tr>
                       ))}

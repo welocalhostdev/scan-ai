@@ -787,12 +787,14 @@ export interface TokenUsageByUser {
   user_email: string;
   total_tokens: number;
   scan_count: number;
+  estimated_cost?: string;
 }
 
 export interface TokenUsageByModel {
   model: string;
   total_tokens: number;
   scan_count: number;
+  estimated_cost?: string;
 }
 
 export interface TokenUsageStats {

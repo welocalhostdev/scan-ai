@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 
 from config import settings
+from ai_pricing import estimate_ai_cost_usd, format_usd
 from auth_profiles import (
     AuthProfileError,
     auth_header_names,
@@ -3382,12 +3383,14 @@ async def admin_token_usage_stats(
     _admin: User = Depends(require_admin),
 ):
     """Get aggregated AI token usage statistics (admin only)."""
-    # Total tokens across all time
     total_tokens = db.query(func.sum(TokenUsage.total_tokens)).scalar() or 0
     total_scans = db.query(TokenUsage).count()
-    
-    # Calculate rough cost estimate (provider pricing varies by model and tier)
-    cost_estimate = (total_tokens / 1000) * 0.0015
+
+    token_records = db.query(TokenUsage).all()
+    cost_estimate = sum(
+        estimate_ai_cost_usd(record.model, record.prompt_tokens, record.completion_tokens)
+        for record in token_records
+    )
     
     # Usage by user
     user_stats_query = (
@@ -3409,6 +3412,13 @@ async def admin_token_usage_stats(
             "user_email": row.user_email,
             "total_tokens": row.total_tokens,
             "scan_count": row.scan_count,
+            "estimated_cost": format_usd(
+                sum(
+                    estimate_ai_cost_usd(record.model, record.prompt_tokens, record.completion_tokens)
+                    for record in token_records
+                    if record.user_id == row.user_id
+                )
+            ),
         }
         for row in user_stats_query
     ]
@@ -3430,6 +3440,13 @@ async def admin_token_usage_stats(
             "model": row.model or "unknown",
             "total_tokens": row.total_tokens,
             "scan_count": row.scan_count,
+            "estimated_cost": format_usd(
+                sum(
+                    estimate_ai_cost_usd(record.model, record.prompt_tokens, record.completion_tokens)
+                    for record in token_records
+                    if (record.model or "unknown") == (row.model or "unknown")
+                )
+            ),
         }
         for row in model_stats_query
     ]
@@ -3453,7 +3470,7 @@ async def admin_token_usage_stats(
             completion_tokens=t.completion_tokens,
             total_tokens=t.total_tokens,
             model=t.model,
-            estimated_cost=t.estimated_cost,
+            estimated_cost=t.estimated_cost or format_usd(estimate_ai_cost_usd(t.model, t.prompt_tokens, t.completion_tokens)),
             created_at=t.created_at.isoformat(),
         )
         for t in recent_query
@@ -3489,7 +3506,10 @@ async def admin_user_token_usage(
     user_tokens = db.query(TokenUsage).filter(TokenUsage.user_id == target_uuid).all()
     
     total_tokens = sum(t.total_tokens for t in user_tokens)
-    cost_estimate = (total_tokens / 1000) * 0.0015
+    cost_estimate = sum(
+        estimate_ai_cost_usd(record.model, record.prompt_tokens, record.completion_tokens)
+        for record in user_tokens
+    )
     
     return {
         "user_id": user_id,
@@ -3504,6 +3524,7 @@ async def admin_user_token_usage(
                 "completion_tokens": t.completion_tokens,
                 "total_tokens": t.total_tokens,
                 "model": t.model,
+                "estimated_cost": t.estimated_cost or format_usd(estimate_ai_cost_usd(t.model, t.prompt_tokens, t.completion_tokens)),
                 "created_at": t.created_at.isoformat(),
             }
             for t in user_tokens
