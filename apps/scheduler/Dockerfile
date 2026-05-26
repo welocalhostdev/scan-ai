@@ -17,4 +17,4 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps ./apps
 COPY apps/scheduler ./apps/scheduler
 
-CMD ["npm", "run", "start", "--workspace=@scanai/scheduler"]
+CMD ["node", "apps/scheduler/src/index.js"]
